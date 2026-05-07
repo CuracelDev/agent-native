@@ -119,6 +119,7 @@ export default function RecordingPage() {
         // Also keep polling while a transcript is pending so "Transcribing…"
         // auto-flips to the ready transcript (or to the failure card).
         if (data?.transcript?.status === "pending") return 3000;
+        if (data?.transcript?.cleanup?.status === "running") return 2000;
         // And keep polling while the title is still the server-seeded
         // default — the agent will land a generated title via
         // `update-recording` and we want the skeleton to swap in promptly.
@@ -143,6 +144,7 @@ export default function RecordingPage() {
   const transcriptFullText = playerDataQ.data?.transcript?.fullText ?? null;
   const transcriptStatus = playerDataQ.data?.transcript?.status;
   const transcriptFailureReason = playerDataQ.data?.transcript?.failureReason;
+  const transcriptCleanup = playerDataQ.data?.transcript?.cleanup ?? null;
   const ctas = playerDataQ.data?.ctas ?? [];
   const showTitleSkeleton = recording
     ? shouldShowGeneratedTitleSkeleton(recording, transcriptStatus)
@@ -790,6 +792,7 @@ export default function RecordingPage() {
                     onSeek={(ms) => playerRef.current?.seek(ms)}
                     status={transcriptStatus}
                     failureReason={transcriptFailureReason}
+                    cleanup={transcriptCleanup}
                     recordingTitle={recording.title}
                     onRetry={() => {
                       // Re-run transcription now that the user may have
