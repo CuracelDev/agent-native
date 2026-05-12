@@ -750,10 +750,30 @@ function startBackgroundProcess(
   child.stderr?.on("data", (chunk) =>
     pipeOutput(prefix, chunk, (value) => process.stderr.write(value)),
   );
-  child.on("exit", (code) => {
+  child.on("exit", (code, signal) => {
     if (shuttingDown) return;
-    process.stderr.write(`${prefix} exited with code ${code ?? 0}\n`);
-    if (name === "tray") shutdown(0);
+    process.stderr.write(
+      `${prefix} exited with code ${code ?? 0}${signal ? ` (signal=${signal})` : ""}\n`,
+    );
+    if (name === "tray") {
+      process.stderr.write(
+        `${prefix} tray child terminated unexpectedly. Diagnostics:\n` +
+          `${prefix}   pid=${child.pid ?? "?"} code=${code ?? "null"} signal=${signal ?? "null"}\n` +
+          `${prefix}   command: ${command} ${args.join(" ")}\n` +
+          `${prefix}   cwd: ${ROOT}\n` +
+          `${prefix} On macOS a code=0 with no visible window almost always means the\n` +
+          `${prefix} OS killed the binary for accessing privacy-sensitive APIs without a\n` +
+          `${prefix} usage-description string. Check Console.app for entries like:\n` +
+          `${prefix}   "This app has crashed because it attempted to access privacy-\n` +
+          `${prefix}    sensitive data without a usage description."\n` +
+          `${prefix} Or run:  log show --predicate 'process == "clips-desktop"' --last 2m\n` +
+          `${prefix} Then run:  codesign -d --entitlements :- templates/clips/desktop/src-tauri/target/debug/Clips\n` +
+          `${prefix} And:       otool -s __TEXT __info_plist templates/clips/desktop/src-tauri/target/debug/Clips | head -40\n` +
+          `${prefix} (the second command should print your Info.plist keys; if empty, the\n` +
+          `${prefix}  build.rs embed step did not run — try a clean rebuild.)\n`,
+      );
+      shutdown(0);
+    }
   });
   return child;
 }

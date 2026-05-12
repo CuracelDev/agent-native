@@ -3,7 +3,23 @@ use std::process::Command;
 
 fn main() {
     add_swift_runtime_rpaths();
+    embed_info_plist();
     tauri_build::build()
+}
+
+fn embed_info_plist() {
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("macos") {
+        return;
+    }
+
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_default();
+    let plist_path = Path::new(&manifest_dir).join("Info.plist");
+    if !plist_path.exists() {
+        return;
+    }
+
+    println!("cargo:rerun-if-changed=Info.plist");
+    println!("cargo:rustc-link-arg=-Wl,-sectcreate,__TEXT,__info_plist,{}", plist_path.display());
 }
 
 fn add_swift_runtime_rpaths() {
