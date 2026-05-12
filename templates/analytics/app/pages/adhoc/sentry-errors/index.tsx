@@ -23,6 +23,7 @@ import {
 } from "@tabler/icons-react";
 import { IssueSparkline } from "./IssueSparkline";
 import { ErrorGroupsPanel } from "./ErrorGroupsPanel";
+import { SlackMentionsPanel } from "./SlackMentionsPanel";
 
 // ---- Types ------------------------------------------------------------------
 
@@ -278,6 +279,8 @@ function IssueDetail({ issue }: { issue: SentryIssue }) {
           {issue.shortId}
         </span>
       </div>
+
+      <SlackMentionsPanel issue={issue} />
     </div>
   );
 }
