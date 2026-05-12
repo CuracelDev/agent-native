@@ -102,6 +102,7 @@ export interface SlackMessage {
   reactions?: { name: string; count: number }[];
   files?: { name: string; mimetype: string; url_private: string }[];
   icons?: { image_48?: string; image_72?: string };
+  channel?: string;
 }
 
 export interface SlackBotInfo {
@@ -276,48 +277,85 @@ export async function searchMessages(
   query: string,
   count = 50,
 ): Promise<{ messages: SlackMessage[]; total: number }> {
-  // search.messages requires a user token (xoxp-), not a bot token.
-  // Try SLACK_USER_TOKEN first, fall back to the configured bot token.
-  const ctx = requireRequestCredentialContext(
-    workspace === "secondary" ? "SLACK_BOT_TOKEN_2" : "SLACK_BOT_TOKEN",
-  );
-  const userToken = await resolveCredential("SLACK_USER_TOKEN", ctx);
-  const botToken = userToken
-    ? null
-    : await resolveCredential(
-        workspace === "secondary" ? "SLACK_BOT_TOKEN_2" : "SLACK_BOT_TOKEN",
-        ctx,
-      );
-  const token = userToken ?? botToken;
-  if (!token) throw new Error("No Slack token configured");
+  const botEnvKey =
+    workspace === "secondary" ? "SLACK_BOT_TOKEN_2" : "SLACK_BOT_TOKEN";
+  const ctx = requireRequestCredentialContext(botEnvKey);
 
-  const params = new URLSearchParams({
-    query,
-    count: String(Math.min(count, 100)),
-    sort: "timestamp",
-    sort_dir: "desc",
-  });
-  const res = await fetch(`https://slack.com/api/search.messages?${params}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) throw new Error(`Slack API error ${res.status}`);
-  const json = (await res.json()) as {
-    ok: boolean;
-    error?: string;
-    messages?: { matches: SlackMessage[]; total: number };
-  };
-  if (!json.ok) {
-    if (json.error === "not_allowed_token_type") {
-      throw new Error(
-        "Slack search requires a user token (xoxp-). Add SLACK_USER_TOKEN in Data Sources → Slack.",
-      );
+  // Prefer a user token (xoxp-) for search.messages if one was configured.
+  const userToken = await resolveCredential("SLACK_USER_TOKEN", ctx);
+  if (userToken) {
+    const params = new URLSearchParams({
+      query,
+      count: String(Math.min(count, 100)),
+      sort: "timestamp",
+      sort_dir: "desc",
+    });
+    const res = await fetch(`https://slack.com/api/search.messages?${params}`, {
+      headers: { Authorization: `Bearer ${userToken}` },
+    });
+    if (!res.ok) throw new Error(`Slack API error ${res.status}`);
+    const json = (await res.json()) as {
+      ok: boolean;
+      error?: string;
+      messages?: { matches: SlackMessage[]; total: number };
+    };
+    if (json.ok) {
+      return {
+        messages: json.messages?.matches || [],
+        total: json.messages?.total || 0,
+      };
     }
-    throw new Error(`Slack API error: ${json.error}`);
+    // fall through to bot-token scan on token errors
   }
-  return {
-    messages: json.messages?.matches || [],
-    total: json.messages?.total || 0,
-  };
+
+  // Fallback: scan recent messages from accessible channels using the bot token.
+  // search.messages requires a user token; this covers the common case where only
+  // a bot token is configured.
+  const terms = query
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((t) => t.length > 2);
+
+  const channelsData = await slackApi<{
+    channels: { id: string; name: string }[];
+  }>(workspace, "conversations.list", {
+    types: "public_channel,private_channel",
+    exclude_archived: "true",
+    limit: "200",
+  });
+
+  const channels = (channelsData.channels ?? []).slice(0, 20);
+  const oldest = String(
+    Math.floor((Date.now() - 30 * 24 * 60 * 60 * 1000) / 1000),
+  );
+  const matches: SlackMessage[] = [];
+
+  await Promise.all(
+    channels.map(async (ch) => {
+      try {
+        const histData = await slackApi<{ messages: SlackMessage[] }>(
+          workspace,
+          "conversations.history",
+          { channel: ch.id, limit: "200", oldest },
+          false,
+        );
+        for (const msg of histData.messages ?? []) {
+          const text = msg.text?.toLowerCase() ?? "";
+          if (terms.length === 0 || terms.some((t) => text.includes(t))) {
+            matches.push({ ...msg, channel: ch.id } as SlackMessage & {
+              channel: string;
+            });
+          }
+        }
+      } catch {
+        // bot may not have access to this channel — skip silently
+      }
+    }),
+  );
+
+  matches.sort((a, b) => parseFloat(b.ts) - parseFloat(a.ts));
+  const limited = matches.slice(0, count);
+  return { messages: limited, total: matches.length };
 }
 
 export async function getUserInfo(
