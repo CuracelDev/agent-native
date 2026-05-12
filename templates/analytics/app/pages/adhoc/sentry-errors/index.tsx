@@ -367,6 +367,9 @@ export default function SentryErrorsDashboard() {
   const [activeTab, setActiveTab] = useState<"top10" | "escalating" | "groups">(
     "top10",
   );
+  const [selectedProjects, setSelectedProjects] = useState<Set<string>>(
+    new Set(),
+  );
 
   const issuesQuery = useActionQuery("sentry", {
     mode: "issues",
@@ -397,10 +400,38 @@ export default function SentryErrorsDashboard() {
     return null;
   }, [issuesQuery.error, rawData]);
 
-  const issues: SentryIssue[] = useMemo(
+  const allIssues: SentryIssue[] = useMemo(
     () => (rawData && "issues" in rawData ? (rawData.issues ?? []) : []),
     [rawData],
   );
+
+  const allProjects = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const issue of allIssues) {
+      if (!seen.has(issue.project.slug)) {
+        seen.set(issue.project.slug, issue.project.name);
+      }
+    }
+    return Array.from(seen.entries()).map(([slug, name]) => ({ slug, name }));
+  }, [allIssues]);
+
+  const issues: SentryIssue[] = useMemo(
+    () =>
+      selectedProjects.size === 0
+        ? allIssues
+        : allIssues.filter((i) => selectedProjects.has(i.project.slug)),
+    [allIssues, selectedProjects],
+  );
+
+  function toggleProject(slug: string) {
+    setSelectedProjects((prev) => {
+      const next = new Set(prev);
+      if (next.has(slug)) next.delete(slug);
+      else next.add(slug);
+      return next;
+    });
+    setSelectedIssueId(null);
+  }
 
   const top10 = useMemo(
     () =>
@@ -546,6 +577,44 @@ export default function SentryErrorsDashboard() {
           isLoading={isLoading}
         />
       </div>
+
+      {/* Project Filter */}
+      {!isLoading && allProjects.length > 1 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-muted-foreground shrink-0">
+            Projects:
+          </span>
+          {allProjects.map(({ slug, name }) => {
+            const active = selectedProjects.has(slug);
+            return (
+              <button
+                key={slug}
+                type="button"
+                onClick={() => toggleProject(slug)}
+                className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                  active
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-background border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
+                }`}
+              >
+                {name}
+              </button>
+            );
+          })}
+          {selectedProjects.size > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedProjects(new Set());
+                setSelectedIssueId(null);
+              }}
+              className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Classification Summary */}
       {!isLoading && !error && issues.length > 0 && (
