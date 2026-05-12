@@ -276,24 +276,47 @@ export async function searchMessages(
   query: string,
   count = 50,
 ): Promise<{ messages: SlackMessage[]; total: number }> {
-  // search.messages requires a user token, but we'll try with bot token
-  // If it fails, we'll fall back to channel history filtering
-  const data = await slackApi<{
-    messages: { matches: SlackMessage[]; total: number };
-  }>(
-    workspace,
-    "search.messages",
-    {
-      query,
-      count: String(Math.min(count, 100)),
-      sort: "timestamp",
-      sort_dir: "desc",
-    },
-    false,
+  // search.messages requires a user token (xoxp-), not a bot token.
+  // Try SLACK_USER_TOKEN first, fall back to the configured bot token.
+  const ctx = requireRequestCredentialContext(
+    workspace === "secondary" ? "SLACK_BOT_TOKEN_2" : "SLACK_BOT_TOKEN",
   );
+  const userToken = await resolveCredential("SLACK_USER_TOKEN", ctx);
+  const botToken = userToken
+    ? null
+    : await resolveCredential(
+        workspace === "secondary" ? "SLACK_BOT_TOKEN_2" : "SLACK_BOT_TOKEN",
+        ctx,
+      );
+  const token = userToken ?? botToken;
+  if (!token) throw new Error("No Slack token configured");
+
+  const params = new URLSearchParams({
+    query,
+    count: String(Math.min(count, 100)),
+    sort: "timestamp",
+    sort_dir: "desc",
+  });
+  const res = await fetch(`https://slack.com/api/search.messages?${params}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`Slack API error ${res.status}`);
+  const json = (await res.json()) as {
+    ok: boolean;
+    error?: string;
+    messages?: { matches: SlackMessage[]; total: number };
+  };
+  if (!json.ok) {
+    if (json.error === "not_allowed_token_type") {
+      throw new Error(
+        "Slack search requires a user token (xoxp-). Add SLACK_USER_TOKEN in Data Sources → Slack.",
+      );
+    }
+    throw new Error(`Slack API error: ${json.error}`);
+  }
   return {
-    messages: data.messages?.matches || [],
-    total: data.messages?.total || 0,
+    messages: json.messages?.matches || [],
+    total: json.messages?.total || 0,
   };
 }
 

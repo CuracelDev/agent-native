@@ -651,7 +651,7 @@ export const dataSources: DataSource[] = [
     description: "Channel messages and workspace search",
     category: "communication",
     icon: IconMessage,
-    envKeys: ["SLACK_BOT_TOKEN"],
+    envKeys: ["SLACK_BOT_TOKEN", "SLACK_USER_TOKEN"],
     docsUrl: "https://api.slack.com/methods",
     walkthroughSteps: [
       {
@@ -672,6 +672,15 @@ export const dataSources: DataSource[] = [
         inputKey: "SLACK_BOT_TOKEN",
         inputLabel: "Bot Token",
         inputPlaceholder: "xoxb-...",
+        inputType: "password",
+      },
+      {
+        title: "Add a User Token for search (optional)",
+        description:
+          'Slack\'s search API requires a user token. Under "OAuth & Permissions", copy the User OAuth Token (starts with "xoxp-"). Required for the Slack search feature in Sentry Error Intelligence.',
+        inputKey: "SLACK_USER_TOKEN",
+        inputLabel: "User Token (for search)",
+        inputPlaceholder: "xoxp-...",
         inputType: "password",
       },
     ],

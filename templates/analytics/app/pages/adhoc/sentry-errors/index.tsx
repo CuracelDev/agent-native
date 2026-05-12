@@ -1,6 +1,11 @@
 import { useState, useMemo } from "react";
-import { useActionQuery } from "@agent-native/core/client";
+import { useActionQuery, sendToAgentChat } from "@agent-native/core/client";
 import { Badge } from "@/components/ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -20,10 +25,18 @@ import {
   IconCopy,
   IconCircleCheck,
   IconLink,
+  IconSparkles,
+  IconFilter,
 } from "@tabler/icons-react";
 import { IssueSparkline } from "./IssueSparkline";
 import { ErrorGroupsPanel } from "./ErrorGroupsPanel";
 import { SlackMentionsPanel } from "./SlackMentionsPanel";
+import {
+  classifyIssue,
+  classificationLabel,
+  classificationColor,
+  type IssueClass,
+} from "./issueClassifier";
 
 // ---- Types ------------------------------------------------------------------
 
@@ -152,13 +165,14 @@ function IssueRow({
   onSelect: () => void;
 }) {
   const count = parseInt(issue.count, 10);
+  const { classification, reason } = classifyIssue(issue);
   return (
     <button
       type="button"
       onClick={onSelect}
       className={`w-full text-left px-4 py-3 border-b border-border/50 last:border-0 hover:bg-muted/40 transition-colors ${
         isSelected ? "bg-muted/60" : ""
-      }`}
+      } ${classification === "noise" || classification === "user-error" ? "opacity-60" : ""}`}
     >
       <div className="flex items-start gap-3">
         <span className="text-xs text-muted-foreground w-5 pt-0.5 shrink-0 font-mono">
@@ -176,6 +190,20 @@ function IssueRow({
                 <IconTrendingUp className="h-2.5 w-2.5" />
                 escalating
               </Badge>
+            )}
+            {classification !== "unknown" && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge
+                    className={`text-[10px] px-1.5 py-0 border cursor-default ${classificationColor(classification)}`}
+                  >
+                    {classificationLabel(classification)}
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs text-xs">
+                  {reason}
+                </TooltipContent>
+              </Tooltip>
             )}
             <span className="text-xs text-muted-foreground font-mono">
               {issue.project.name}
@@ -407,6 +435,33 @@ export default function SentryErrorsDashboard() {
   const isLoading = issuesQuery.isLoading;
   const error = dataError;
 
+  const classifications = useMemo(
+    () => issues.map((i) => ({ id: i.id, ...classifyIssue(i) })),
+    [issues],
+  );
+
+  const actionableCount = classifications.filter(
+    (c) => c.classification === "actionable",
+  ).length;
+  const noiseCount = classifications.filter(
+    (c) => c.classification === "noise" || c.classification === "user-error",
+  ).length;
+
+  function handleClassifyWithAI() {
+    const sample = top10
+      .map((issue, i) => {
+        const { classification, reason } = classifyIssue(issue);
+        return `${i + 1}. [${issue.shortId}] ${issue.metadata.type ?? issue.title}${
+          issue.metadata.value ? `: ${issue.metadata.value.slice(0, 80)}` : ""
+        } — ${issue.count} events, ${issue.userCount} users, culprit: ${issue.culprit} (heuristic: ${classification}, ${reason})`;
+      })
+      .join("\n");
+    sendToAgentChat({
+      message: `Please analyze these top Sentry errors and classify each one as: "actionable" (real bug we should fix), "user-error" (expected from bad user input/auth), or "noise" (transient/third-party/not worth fixing). For each, briefly explain why and suggest what to do.\n\n${sample}`,
+      submit: true,
+    });
+  }
+
   function toggleIssue(id: string) {
     setSelectedIssueId((prev) => (prev === id ? null : id));
   }
@@ -491,6 +546,44 @@ export default function SentryErrorsDashboard() {
           isLoading={isLoading}
         />
       </div>
+
+      {/* Classification Summary */}
+      {!isLoading && !error && issues.length > 0 && (
+        <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-lg border border-border/50 bg-muted/20 flex-wrap">
+          <div className="flex items-center gap-4 text-sm flex-wrap">
+            <span className="text-muted-foreground text-xs">
+              Heuristic classification:
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-red-500 shrink-0" />
+              <span className="text-xs font-medium">
+                {actionableCount} actionable
+              </span>
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-slate-400 shrink-0" />
+              <span className="text-xs font-medium">
+                {noiseCount} noise / user error
+              </span>
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-muted-foreground/30 shrink-0" />
+              <span className="text-xs font-medium">
+                {issues.length - actionableCount - noiseCount} unclassified
+              </span>
+            </span>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 gap-1.5 text-xs shrink-0"
+            onClick={handleClassifyWithAI}
+          >
+            <IconSparkles className="h-3.5 w-3.5" />
+            Classify top 10 with AI
+          </Button>
+        </div>
+      )}
 
       {/* Main Content */}
       {error ? (
