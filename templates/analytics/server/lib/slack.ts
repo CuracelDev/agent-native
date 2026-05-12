@@ -476,12 +476,8 @@ export async function resolveUsers(
       try {
         results[id] = await getUserInfo(workspace, id);
       } catch {
-        results[id] = {
-          id,
-          name: id,
-          real_name: id,
-          profile: { display_name: id, image_48: "", image_72: "" },
-        };
+        // Don't create a fake entry — leave it absent so resolveUsername
+        // falls back to msg.username (populated by search.messages API).
       }
     }),
   );

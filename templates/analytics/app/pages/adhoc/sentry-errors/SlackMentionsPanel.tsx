@@ -66,9 +66,11 @@ function resolveUsername(
 ): string {
   if (msg.user && users[msg.user]) {
     const u = users[msg.user];
-    return u.profile.display_name || u.real_name || u.name;
+    const resolved = u.profile.display_name || u.real_name || u.name;
+    // Reject raw user IDs (e.g. "U08ABC123") — fall through to username
+    if (resolved && !/^[UW][A-Z0-9]{6,}$/.test(resolved)) return resolved;
   }
-  return msg.username ?? "Unknown";
+  return msg.username || "Unknown";
 }
 
 function stripSlackFormatting(text: string): string {
