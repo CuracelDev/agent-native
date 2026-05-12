@@ -237,9 +237,36 @@ export function SlackMentionsPanel({ issue }: SlackMentionsPanelProps) {
           <span>{dataError}</span>
         </div>
       ) : searched && messages.length === 0 ? (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground py-1">
-          <IconMessage className="h-4 w-4 shrink-0" />
-          <span>No Slack messages found</span>
+        <div className="space-y-2 py-1">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <IconMessage className="h-4 w-4 shrink-0" />
+            <span>No messages found in accessible channels</span>
+          </div>
+          <div className="rounded-md border border-border/50 bg-muted/20 px-3 py-2.5 space-y-1.5">
+            <p className="text-[11px] font-medium text-foreground/80">
+              Searching private channels?
+            </p>
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              The bot can only scan public channels it&apos;s been added to. To
+              search private channels, add a Slack{" "}
+              <strong>User OAuth Token</strong> (xoxp-) in{" "}
+              <a
+                href="/analytics/data-sources"
+                className="underline underline-offset-2 hover:text-foreground"
+              >
+                Data Sources → Slack
+              </a>
+              .
+            </p>
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              To get one: Slack app → <strong>OAuth &amp; Permissions</strong> →{" "}
+              <strong>User Token Scopes</strong> → add{" "}
+              <code className="font-mono bg-muted px-1 rounded">
+                search:read
+              </code>{" "}
+              → Reinstall app → copy the <strong>User OAuth Token</strong>.
+            </p>
+          </div>
         </div>
       ) : (
         <div className="space-y-3 max-h-56 overflow-y-auto">
