@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useState as useLocalState } from "react";
 import { useActionMutation } from "@agent-native/core/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -162,7 +161,7 @@ export function SlackMentionsPanel({ issue }: SlackMentionsPanelProps) {
   const [editingQuery, setEditingQuery] = useState(false);
   const [result, setResult] = useState<SlackSearchResult | null>(null);
   const [searched, setSearched] = useState(false);
-  const [expandedThreads, setExpandedThreads] = useLocalState<Set<string>>(
+  const [expandedThreads, setExpandedThreads] = useState<Set<string>>(
     new Set(),
   );
 
