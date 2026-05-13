@@ -79,6 +79,7 @@ import { cn } from "./utils.js";
 import { agentNativePath } from "./api-path.js";
 import { trackEvent } from "./analytics.js";
 import { getFrameOrigin, isInFrame, isTrustedFrameMessage } from "./frame.js";
+import { shouldParentFrameOwnAgentPanel } from "./builder-frame.js";
 import {
   getInitialAgentSidebarOpen,
   SIDEBAR_OPEN_KEY,
@@ -1954,12 +1955,12 @@ export function AgentSidebar({
   // Default to true when inside an iframe — assume the frame sidebar is active
   // until told otherwise. This prevents both sidebars flashing after hot reloads.
   const [frameCodeMode, setFrameCodeMode] = useState(
-    () => typeof window !== "undefined" && window.parent !== window,
+    () => shouldParentFrameOwnAgentPanel(),
   );
 
   useEffect(() => {
     const toggleHandler = () => {
-      if (frameCodeMode && window.parent !== window) {
+      if (frameCodeMode && shouldParentFrameOwnAgentPanel()) {
         // Forward toggle to frame parent — the frame sidebar handles it
         window.parent.postMessage(
           { type: "agentNative.toggleSidebar" },
@@ -1970,7 +1971,7 @@ export function AgentSidebar({
       }
     };
     const openHandler = () => {
-      if (frameCodeMode && window.parent !== window) {
+      if (frameCodeMode && shouldParentFrameOwnAgentPanel()) {
         window.parent.postMessage(
           { type: "agentNative.toggleSidebar", data: { open: true } },
           parentFrameTargetOrigin(),
@@ -1980,7 +1981,7 @@ export function AgentSidebar({
       }
     };
     const closeHandler = () => {
-      if (frameCodeMode && window.parent !== window) {
+      if (frameCodeMode && shouldParentFrameOwnAgentPanel()) {
         window.parent.postMessage(
           { type: "agentNative.toggleSidebar", data: { open: false } },
           parentFrameTargetOrigin(),
