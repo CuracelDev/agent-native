@@ -1896,6 +1896,25 @@ describe("server/auth", () => {
     });
   });
 
+  describe("getAppProductionUrl", () => {
+    it("uses the workspace OAuth origin ahead of a loopback gateway", async () => {
+      vi.stubEnv("WORKSPACE_OAUTH_ORIGIN", "https://auth.agent.example");
+      vi.stubEnv("WORKSPACE_GATEWAY_URL", "http://127.0.0.1:8080");
+      const { getAppProductionUrl } = await import("./app-url.js");
+
+      expect(getAppProductionUrl()).toBe("https://auth.agent.example");
+    });
+
+    it("uses platform URLs ahead of loopback workspace gateways in production", async () => {
+      vi.stubEnv("NODE_ENV", "production");
+      vi.stubEnv("URL", "https://workspace.example.test");
+      vi.stubEnv("WORKSPACE_GATEWAY_URL", "http://127.0.0.1:8080");
+      const { getAppProductionUrl } = await import("./app-url.js");
+
+      expect(getAppProductionUrl()).toBe("https://workspace.example.test");
+    });
+  });
+
   describe("resolveOAuthRedirectUri", () => {
     it("defaults root workspace framework-route requests to the root callback", async () => {
       vi.stubEnv("APP_BASE_PATH", "/dispatch");
