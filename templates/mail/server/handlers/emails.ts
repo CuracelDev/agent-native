@@ -937,6 +937,10 @@ export const archiveEmail = defineEventHandler(async (event: H3Event) => {
         threadId = threadId || msg.threadId;
         labelIds = msg.labelIds;
       }
+      if (!threadId) {
+        setResponseStatus(event, 404);
+        return { error: "Thread not found" };
+      }
       // Remove INBOX + the current label (if archiving from a label view)
       const removeLabels = ["INBOX"];
       if (body.removeLabel) {

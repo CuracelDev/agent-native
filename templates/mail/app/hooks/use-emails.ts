@@ -727,6 +727,7 @@ export function useArchiveEmail() {
       id: string;
       accountEmail?: string;
       removeLabel?: string;
+      threadId?: string;
     }) => {
       await qc.cancelQueries({ queryKey: ["emails"] });
       const previous = qc.getQueriesData<InfiniteEmails>({
