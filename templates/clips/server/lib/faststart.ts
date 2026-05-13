@@ -66,7 +66,7 @@ function parseTopLevelAtoms(buf: Uint8Array): AtomInfo[] {
   let pos = 0;
   const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
 
-  while (pos < buf.byteLength - 8) {
+  while (pos <= buf.byteLength - 8) {
     let size = readU32(buf, pos);
     const type = readType(buf, pos + 4);
     let headerSize = 8;
@@ -104,7 +104,7 @@ function walkContainer(
   delta: number,
 ): void {
   let pos = start;
-  while (pos < end - 8) {
+  while (pos <= end - 8) {
     let size = readU32(buf, pos);
     const type = readType(buf, pos + 4);
     let headerSize = 8;
