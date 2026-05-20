@@ -24,7 +24,9 @@ const openAppSchema = z
     embed: z
       .boolean()
       .optional()
-      .describe("Render the app inline in MCP Apps when supported."),
+      .describe(
+        "Render the app or focused route/component inline in MCP Apps when supported.",
+      ),
     chrome: z
       .enum(["full", "minimal"])
       .optional()
