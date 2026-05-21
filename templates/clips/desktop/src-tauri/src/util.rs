@@ -190,6 +190,42 @@ pub fn show_without_activation(window: &WebviewWindow) {
     }
 }
 
+/// Set `NSWindowCollectionBehaviorCanJoinAllSpaces` so the window follows the
+/// user across every Mission Control space and appears on any monitor — not
+/// just the one where it was first shown.
+#[cfg(target_os = "macos")]
+pub fn set_window_can_join_all_spaces(window: &WebviewWindow) {
+    let win = window.clone();
+    if let Err(err) = win.clone().run_on_main_thread(move || {
+        let label = win.label().to_string();
+        let ns_window_ptr = match win.ns_window() {
+            Ok(p) => p,
+            Err(err) => {
+                eprintln!(
+                    "[clips-tray] set_window_can_join_all_spaces({label}): ns_window() failed: {err}"
+                );
+                return;
+            }
+        };
+        if ns_window_ptr.is_null() {
+            return;
+        }
+        unsafe {
+            let obj = ns_window_ptr as *mut objc2::runtime::AnyObject;
+            // NSWindowCollectionBehaviorCanJoinAllSpaces = 1 << 0 = 1
+            let _: () = objc2::msg_send![&*obj, setCollectionBehavior: 1usize];
+        }
+        dlog!("[clips-tray] set_window_can_join_all_spaces({label}): applied");
+    }) {
+        eprintln!(
+            "[clips-tray] set_window_can_join_all_spaces: run_on_main_thread failed: {err}"
+        );
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn set_window_can_join_all_spaces(_window: &WebviewWindow) {}
+
 #[cfg(not(target_os = "macos"))]
 pub fn show_without_activation(window: &WebviewWindow) {
     // On non-macOS we just fall back to the standard show. Focus stealing

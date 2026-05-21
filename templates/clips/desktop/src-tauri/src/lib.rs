@@ -29,7 +29,7 @@ use state::{
     DictationActive, DictationEnabled, LastTranscript, MeetingActive, PopoverShownAt,
     RecordingActive, TrayAnchor, TrayMeetings, VoiceWakePopover,
 };
-use util::{is_recording_active, set_capture_included};
+use util::{is_recording_active, set_capture_included, set_window_can_join_all_spaces};
 
 // Embedded fallback icon — a tiny 16x16 solid purple PNG so the binary always
 // has *something* to display even if `icons/tray.png` is missing on disk. The
@@ -184,6 +184,12 @@ pub fn run() {
             // server URL via `meetings_watcher_set_server_url` once the
             // popover boots.
             meetings_watcher::spawn_watcher(app.handle().clone());
+
+            // Ensure the popover appears above every app on every Mission
+            // Control space so it's reachable before the user starts recording.
+            if let Some(window) = app.get_webview_window("popover") {
+                set_window_can_join_all_spaces(&window);
+            }
 
             // Hide the popover on blur so it feels like a real menu-bar popover.
             // The 250ms guard is the important bit — during the tray-click

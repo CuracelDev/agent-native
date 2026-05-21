@@ -517,6 +517,9 @@ pub async fn show_bubble(app: AppHandle) -> Result<(), String> {
     // `getDisplayMedia`, which matches the other Clips chrome (popover,
     // toolbar, countdown) but NOT what users want for the camera bubble.
     let _ = win.show();
+    // canJoinAllSpaces: bubble follows the user across every Mission Control
+    // space and every monitor — not just the one where the session started.
+    crate::util::set_window_can_join_all_spaces(&win);
     dlog!("[clips-tray] bubble shown at ({},{}) size {}", x, y, size);
     Ok(())
 }
