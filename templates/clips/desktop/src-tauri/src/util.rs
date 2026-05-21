@@ -212,8 +212,11 @@ pub fn set_window_can_join_all_spaces(window: &WebviewWindow) {
         }
         unsafe {
             let obj = ns_window_ptr as *mut objc2::runtime::AnyObject;
-            // NSWindowCollectionBehaviorCanJoinAllSpaces = 1 << 0 = 1
-            let _: () = objc2::msg_send![&*obj, setCollectionBehavior: 1usize];
+            // Read the current behavior so we don't discard flags Tauri
+            // already set (e.g. NSWindowCollectionBehaviorManaged = 4).
+            // NSWindowCollectionBehaviorCanJoinAllSpaces = 1 << 0 = 1.
+            let current: usize = objc2::msg_send![&*obj, collectionBehavior];
+            let _: () = objc2::msg_send![&*obj, setCollectionBehavior: current | 1usize];
         }
         dlog!("[clips-tray] set_window_can_join_all_spaces({label}): applied");
     }) {
