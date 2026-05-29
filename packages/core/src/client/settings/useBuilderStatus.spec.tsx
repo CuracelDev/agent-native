@@ -436,6 +436,38 @@ describe("useBuilderConnectFlow", () => {
     setUserAgent("Mozilla/5.0 Chrome/140.0");
     setEmbeddedWindow(true);
     vi.mocked(openMcpAppHostLink).mockResolvedValueOnce(true);
+    vi.mocked(fetch).mockReset();
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        jsonResponse({
+          configured: false,
+          envManaged: false,
+          builderEnabled: true,
+          orgName: null,
+          cliAuthUrl: signedCliAuthUrl,
+          connectUrl:
+            "http://localhost:3000/_agent-native/builder/connect?_an_connect=signed",
+          appHost: "https://builder.io",
+          apiHost: "https://api.builder.io",
+          publicKeyConfigured: false,
+          privateKeyConfigured: false,
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          configured: false,
+          envManaged: false,
+          builderEnabled: true,
+          orgName: null,
+          cliAuthUrl: refreshedCliAuthUrl,
+          connectUrl:
+            "http://localhost:3000/_agent-native/builder/connect?_an_connect=refreshed",
+          appHost: "https://builder.io",
+          apiHost: "https://api.builder.io",
+          publicKeyConfigured: false,
+          privateKeyConfigured: false,
+        }),
+      );
 
     await act(async () => {
       root.render(<BuilderConnectProbe />);
@@ -455,7 +487,7 @@ describe("useBuilderConnectFlow", () => {
       "width=600,height=700",
     );
     expect(openMcpAppHostLink).toHaveBeenCalledWith(
-      expectedConnectUrl(signedCliAuthUrl),
+      expectedConnectUrl(refreshedCliAuthUrl),
     );
     expect(container.textContent).toContain("not-configured connecting");
     expect(container.textContent).not.toContain("Allow popups");

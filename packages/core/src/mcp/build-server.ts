@@ -41,6 +41,7 @@ import {
 import { MCP_APP_CHAT_BRIDGE_QUERY_PARAM } from "../shared/embed-auth.js";
 import { getBuiltinCrossAppTools } from "./builtin-tools.js";
 import { MCP_CONNECT_SCOPE } from "./connect-store.js";
+import { getConfiguredAppBasePath } from "../server/app-base-path.js";
 import {
   MCP_OAUTH_SCOPES,
   hasMcpOAuthScope,
@@ -125,6 +126,8 @@ export interface MCPCallerIdentity {
 export interface MCPRequestMeta {
   /** Origin of the running app, e.g. `http://localhost:8100`. */
   origin?: string;
+  /** Optional mount prefix for path-mounted apps, e.g. `/mail`. */
+  basePath?: string;
   /** Optional client preference for which URL the *markdown* link uses. */
   target?: "browser" | "desktop" | "terminal";
   /**
@@ -580,9 +583,16 @@ function absoluteMetadataUrl(
   const trimmed = value?.trim();
   if (!trimmed) return undefined;
   try {
-    return requestMeta?.origin
-      ? new URL(trimmed, requestMeta.origin).href
-      : new URL(trimmed).href;
+    if (requestMeta?.origin) {
+      const basePath = requestMeta.basePath ?? getConfiguredAppBasePath();
+      const appBase = `${requestMeta.origin.replace(/\/+$/, "")}${basePath}/`;
+      const appLocalValue =
+        trimmed.startsWith("/") && !trimmed.startsWith("//")
+          ? trimmed.replace(/^\/+/, "")
+          : trimmed;
+      return new URL(appLocalValue, appBase).href;
+    }
+    return new URL(trimmed).href;
   } catch {
     return trimmed;
   }

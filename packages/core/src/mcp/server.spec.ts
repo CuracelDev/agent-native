@@ -421,11 +421,15 @@ describe("handleMcpRequest — web-standard runtime fallback (no Node req/res)",
     delete process.env.ACCESS_TOKENS;
     delete process.env.A2A_SECRET;
     delete process.env.BETTER_AUTH_SECRET;
+    delete process.env.APP_BASE_PATH;
+    delete process.env.VITE_APP_BASE_PATH;
     mockOAuthClients.clear();
   });
   afterEach(() => {
     delete process.env.ACCESS_TOKEN;
     delete process.env.BETTER_AUTH_SECRET;
+    delete process.env.APP_BASE_PATH;
+    delete process.env.VITE_APP_BASE_PATH;
     mockOAuthClients.clear();
     vi.clearAllMocks();
   });
@@ -442,7 +446,6 @@ describe("handleMcpRequest — web-standard runtime fallback (no Node req/res)",
           clientInfo: { name: "agent-native-connect", version: "1.0.0" },
         },
       },
-      { headers: await mcpAppsAuthHeaders() },
     );
     expect(out.jsonrpc).toBe("2.0");
     expect(out.id).toBe(1);
@@ -468,6 +471,35 @@ describe("handleMcpRequest — web-standard runtime fallback (no Node req/res)",
     ).toMatchObject({
       mimeTypes: ["text/html;profile=mcp-app"],
     });
+  });
+
+  it("resolves MCP server branding URLs under APP_BASE_PATH", async () => {
+    process.env.APP_BASE_PATH = "/dispatch";
+    const out = await callWeb(
+      {
+        jsonrpc: "2.0",
+        id: 10,
+        method: "initialize",
+        params: {
+          protocolVersion: "2025-06-18",
+          capabilities: {},
+          clientInfo: { name: "agent-native-connect", version: "1.0.0" },
+        },
+      },
+    );
+
+    expect(out.error).toBeUndefined();
+    expect(out.result.serverInfo.websiteUrl).toBe(
+      "https://mail.agent-native.com/dispatch/mail",
+    );
+    expect(out.result.serverInfo.icons).toEqual([
+      {
+        src: "https://mail.agent-native.com/dispatch/agent-native-icon-light.svg",
+        mimeType: "image/svg+xml",
+        sizes: ["135x78"],
+        theme: "light",
+      },
+    ]);
   });
 
   it("handles `tools/list` and returns the registered action with MCP App metadata", async () => {

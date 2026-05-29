@@ -657,13 +657,30 @@ export function useBuilderConnectFlow(
             return;
           }
 
-          const trackedDirectUrl = withBuilderConnectTrackingParams(directUrl, {
-            source: clickTrackingSource,
-            flow: clickTrackingFlow,
-          });
           void (async () => {
+            const s = await fetchStatus();
+            if (!mountedRef.current) return;
+            if (s) {
+              setHasFetchedStatus(true);
+              setConfigured(!!s.configured);
+              setEnvManaged(!!s.envManaged);
+              setBuilderEnabled(!!s.builderEnabled);
+              const nextConnectUrl = s.cliAuthUrl ?? s.connectUrl ?? null;
+              setStatusConnectUrl(nextConnectUrl);
+              statusConnectUrlAtRef.current = nextConnectUrl
+                ? Date.now()
+                : null;
+              setOrgName(s.orgName ?? null);
+            }
+
+            const hostUrl =
+              s?.cliAuthUrl ?? s?.connectUrl ?? cachedFreshUrl ?? directUrl;
+            const trackedHostUrl = withBuilderConnectTrackingParams(hostUrl, {
+              source: clickTrackingSource,
+              flow: clickTrackingFlow,
+            });
             const openedByHost =
-              await openBuilderConnectViaMcpHost(trackedDirectUrl);
+              await openBuilderConnectViaMcpHost(trackedHostUrl);
             if (!mountedRef.current || openedByHost) return;
             stopPoll();
             connectStartedAtRef.current = null;
