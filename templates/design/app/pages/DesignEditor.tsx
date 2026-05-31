@@ -342,6 +342,8 @@ export default function DesignEditor() {
     standalonePick,
     dismissStandalonePick,
   } = useVariantFlow(id);
+
+  const { session } = useSession();
   const pendingVariantKey = useMemo(
     () =>
       pendingVariants
@@ -359,8 +361,6 @@ export default function DesignEditor() {
   useEffect(() => {
     setSelectedVariantId(initialVariantId);
   }, [initialVariantId, pendingVariantKey]);
-
-  const { session } = useSession();
 
   useEffect(() => {
     return () => clearGenerationCompleteTimer();
