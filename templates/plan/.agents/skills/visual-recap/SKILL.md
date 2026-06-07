@@ -165,11 +165,17 @@ Before/after wireframes must be comparable:
 - If the new action opens another popover, menu, or composer, include the opened
   state only when it clarifies the flow, and anchor it to the actual trigger.
 
-Prefer HTML wireframes (`WireframeBlock` with `html` / `css`) for recap UI when
-placement precision matters, especially popovers, menus, dialogs, and dense
-forms. Use renderer-owned `--wf-*` tokens and ordinary semantic HTML; avoid
-text-only boxes, cramped labels, raw coordinate diagrams, and abstract
-before/after cards that do not resemble the product surface.
+Use the standard `WireframeBlock` / `<Screen>` format so the Plan viewer owns the
+surface frame, theme, and sketchy/clean toggle. HTML wireframes are appropriate
+when placement precision matters, especially popovers, menus, dialogs, and dense
+forms; kit-tree wireframes are appropriate for simpler layouts. For HTML
+wireframes, keep `renderMode` unset or `wireframe` unless a design-only editable
+mockup is explicitly required, because `renderMode="design"` disables the
+sketchy rough overlay. Use renderer-owned `--wf-*` tokens, semantic controls, and
+rough targets such as `[data-rough]`, `.wf-card`, `.wf-box`, buttons, inputs, and
+textareas; avoid hard-coded colors, text-only boxes, cramped labels, raw
+coordinate diagrams, and abstract before/after cards that do not resemble the
+product surface.
 
 Before sharing a UI-impact recap, render it in the Plan viewer and inspect the
 top canvas at the current theme. If any artboard, label, annotation, toolbar, or
@@ -277,11 +283,14 @@ For UI diffs, wireframes are the visual comparison primitive. Use before/after
 wireframes when side-by-side review helps; use after-only or a state sequence
 when that better matches the change. The visual headline must show exact
 placement, realistic chrome, and adequate padding before any abstract
-explanation. For document-body comparisons, there is no other multi-column
-primitive — `columns` plus split `diff` are the whole comparison vocabulary. Do
-not hand-build side-by-side layouts in `custom-html`, and do not stack two
-`data-model` blocks vertically and call it a comparison when `columns` exists to
-put them side by side.
+explanation. Put paired UI wireframes inside `columns` labeled `Before` and
+`After`; do not hand-build a side-by-side layout in `custom-html` or stack two
+wireframes vertically when columns would make the comparison clearer. For
+document-body comparisons, there is no other multi-column primitive — `columns`
+plus split `diff` are the whole comparison vocabulary. Do not hand-build
+side-by-side layouts in `custom-html`, and do not stack two `data-model` blocks
+vertically and call it a comparison when `columns` exists to put them side by
+side.
 
 ## Grounding Rule
 
