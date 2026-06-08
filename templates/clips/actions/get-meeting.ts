@@ -121,6 +121,15 @@ export default defineAction({
       transcript = tr ?? null;
     }
 
-    return { meeting, participants, actionItems, recording, transcript };
+    // "AI notes only" share scope: viewers (people the meeting was shared with,
+    // not the owner/editor) see only the AI summary, bullets, and action items.
+    // The raw transcript, recording, and the owner's typed notes are withheld.
+    if (access.role === "viewer" && row.shareScope === "notes") {
+      meeting.userNotesMd = "";
+      recording = null;
+      transcript = null;
+    }
+
+    return { meeting, participants, actionItems, recording, transcript, role: access.role };
   },
 });

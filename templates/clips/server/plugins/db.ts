@@ -634,6 +634,10 @@ const migrations = runMigrations(
       version: 40,
       sql: `ALTER TABLE recordings ADD COLUMN IF NOT EXISTS source_window_title TEXT`,
     },
+    {
+      version: 41,
+      sql: `ALTER TABLE clips_meetings ADD COLUMN IF NOT EXISTS share_scope TEXT NOT NULL DEFAULT 'full'`,
+    },
   ],
   { table: "clips_migrations" },
 );

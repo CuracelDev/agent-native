@@ -15,7 +15,11 @@ import {
   IconUsers,
   IconVideo,
 } from "@tabler/icons-react";
-import { useActionMutation, useActionQuery } from "@agent-native/core/client";
+import {
+  ShareButton,
+  useActionMutation,
+  useActionQuery,
+} from "@agent-native/core/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -94,6 +98,50 @@ interface Meeting {
   actionItemsJson?: ActionItem[] | null;
   segmentsJson?: TranscriptSegment[] | null;
   participants?: Participant[];
+  shareScope?: "full" | "notes";
+}
+
+type MeetingRole = "owner" | "admin" | "editor" | "viewer";
+
+function ShareScopeToggle({
+  value,
+  onChange,
+}: {
+  value: "full" | "notes";
+  onChange: (next: "full" | "notes") => void;
+}) {
+  const options: Array<{ value: "full" | "notes"; label: string }> = [
+    { value: "full", label: "Full" },
+    { value: "notes", label: "AI notes only" },
+  ];
+  return (
+    <div
+      role="radiogroup"
+      aria-label="What shared viewers can see"
+      className="inline-flex items-center rounded-md border border-border p-0.5"
+    >
+      {options.map((opt) => {
+        const active = value === opt.value;
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            onClick={() => onChange(opt.value)}
+            className={cn(
+              "h-7 rounded-[5px] px-2.5 text-xs font-medium transition-colors cursor-pointer",
+              active
+                ? "bg-accent text-accent-foreground"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 function formatDateTime(iso?: string | null): string {
@@ -290,6 +338,7 @@ export default function MeetingDetailRoute() {
     actionItems?: ActionItem[];
     transcript?: { segmentsJson?: TranscriptSegment[] | null } | null;
     recording?: { id: string; durationMs?: number | null } | null;
+    role?: MeetingRole;
   };
 
   const { data, isLoading, isError } = useActionQuery<GetMeetingResp>(
@@ -423,6 +472,12 @@ export default function MeetingDetailRoute() {
     updateMeeting.mutate({ id: meeting.id, userNotesMd: next });
   };
 
+  const handleShareScopeChange = (next: "full" | "notes") => {
+    if (!meeting) return;
+    patchCachedMeeting({ shareScope: next });
+    updateMeeting.mutate({ id: meeting.id, shareScope: next });
+  };
+
   /**
    * Granola-signature behavior: when the user edits an AI block, "promote"
    * its content into userNotesMd so it survives re-generation. The AI block
@@ -541,6 +596,14 @@ export default function MeetingDetailRoute() {
   const segments = meeting.segmentsJson ?? [];
   const recordingDuration = formatDurationMs(meeting.recordingDurationMs);
 
+  const role = data?.role;
+  const canManageShare = role === "owner" || role === "admin";
+  const shareScope = meeting.shareScope ?? "full";
+  const shareUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/meetings/${meeting.id}`
+      : undefined;
+
   return (
     <div className="p-6 max-w-6xl mx-auto w-full">
       <PageHeader>
@@ -591,6 +654,25 @@ export default function MeetingDetailRoute() {
               Regenerate notes
             </Button>
           ) : null}
+          {canManageShare && (
+            <>
+              <ShareScopeToggle
+                value={shareScope}
+                onChange={handleShareScopeChange}
+              />
+              <ShareButton
+                resourceType="meeting"
+                resourceId={meeting.id}
+                resourceTitle={meeting.title}
+                shareUrl={shareUrl}
+                accessNote={
+                  shareScope === "notes"
+                    ? "Shared viewers see AI notes only — the transcript and your notes stay private."
+                    : "Shared viewers see the full transcript and notes."
+                }
+              />
+            </>
+          )}
           <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

@@ -346,6 +346,12 @@ export const meetings = table("clips_meetings", {
   })
     .notNull()
     .default("adhoc"),
+  // Controls what shared viewers (non-owners) see: "full" exposes the raw
+  // transcript + the owner's typed notes; "notes" exposes only the AI summary,
+  // bullets, and action items. Owners/editors always see everything.
+  shareScope: text("share_scope", { enum: ["full", "notes"] })
+    .notNull()
+    .default("full"),
   // Reminder bookkeeping so the desktop notifier doesn't fire twice.
   reminderFiredAt: text("reminder_fired_at"),
   createdAt: text("created_at").notNull().default(now()),

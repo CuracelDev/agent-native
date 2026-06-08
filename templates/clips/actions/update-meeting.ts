@@ -41,6 +41,12 @@ export default defineAction({
       .describe("Replace the action item set on the meetings row JSON"),
     transcriptStatus: z.enum(["idle", "pending", "ready", "failed"]).optional(),
     visibility: z.enum(["private", "org", "public"]).optional(),
+    shareScope: z
+      .enum(["full", "notes"])
+      .optional()
+      .describe(
+        "What shared viewers see: 'full' = raw transcript + notes, 'notes' = AI notes only",
+      ),
   }),
   run: async (args) => {
     await assertAccess("meeting", args.id, "editor");
@@ -67,6 +73,7 @@ export default defineAction({
       patch.actionItemsJson = JSON.stringify(args.actionItems);
     if (args.transcriptStatus) patch.transcriptStatus = args.transcriptStatus;
     if (args.visibility) patch.visibility = args.visibility;
+    if (args.shareScope) patch.shareScope = args.shareScope;
 
     await db
       .update(schema.meetings)
