@@ -319,7 +319,7 @@ importers:
         version: 0.1.1
       h3:
         specifier: ^2.0.1-rc.20
-        version: 2.0.1-rc.22(crossws@0.4.5(srvx@0.11.16))
+        version: 2.0.1-rc.22(crossws@0.4.6(srvx@0.11.16))
       highlight.js:
         specifier: ^11.11.1
         version: 11.11.1
@@ -351,8 +351,8 @@ importers:
         specifier: ^0.4.6
         version: 0.4.6(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       nitro:
-        specifier: 3.0.260415-beta
-        version: 3.0.260415-beta(@libsql/client@0.15.15)(better-sqlite3@12.8.0)(chokidar@4.0.3)(dotenv@17.4.0)(drizzle-orm@0.45.2(@libsql/client@0.15.15)(@neondatabase/serverless@1.1.0)(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(@types/pg@8.20.0)(better-sqlite3@12.8.0)(kysely@0.28.15)(pg@8.20.0)(postgres@3.4.9))(giget@3.2.0)(ioredis@5.10.1)(jiti@2.6.1)(lru-cache@11.3.6)(rollup@4.60.1)(vite@8.0.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@24.12.2)(esbuild@0.27.7)(jiti@2.6.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))
+        specifier: 3.0.260610-beta
+        version: 3.0.260610-beta(@libsql/client@0.15.15)(better-sqlite3@12.8.0)(chokidar@4.0.3)(dotenv@17.4.0)(drizzle-orm@0.45.2(@libsql/client@0.15.15)(@neondatabase/serverless@1.1.0)(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(@types/pg@8.20.0)(better-sqlite3@12.8.0)(kysely@0.28.15)(pg@8.20.0)(postgres@3.4.9))(giget@3.2.0)(ioredis@5.10.1)(jiti@2.6.1)(lru-cache@11.3.6)(rollup@4.60.1)(vite@8.0.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@24.12.2)(esbuild@0.27.7)(jiti@2.6.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(wrangler@4.81.0)
       p-limit:
         specifier: ^7.3.0
         version: 7.3.0
@@ -703,7 +703,7 @@ importers:
         version: 8.6.0(react@19.2.7)
       h3:
         specifier: ^2.0.1-rc.20
-        version: 2.0.1-rc.22(crossws@0.4.5(srvx@0.11.16))
+        version: 2.0.1-rc.22(crossws@0.4.6(srvx@0.11.16))
       input-otp:
         specifier: ^1.4.2
         version: 1.4.2(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -803,7 +803,7 @@ importers:
         version: 4.0.3
       h3:
         specifier: ^2.0.1-rc.20
-        version: 2.0.1-rc.22(crossws@0.4.5(srvx@0.11.16))
+        version: 2.0.1-rc.22(crossws@0.4.6(srvx@0.11.16))
       isbot:
         specifier: ^5.1.27
         version: 5.1.40
@@ -891,7 +891,7 @@ importers:
         version: 5.100.10(react@19.2.7)
       h3:
         specifier: 'catalog:'
-        version: 2.0.1-rc.22(crossws@0.4.5(srvx@0.11.16))
+        version: 2.0.1-rc.22(crossws@0.4.6(srvx@0.11.16))
       listhen:
         specifier: 'catalog:'
         version: 1.9.1(srvx@0.11.16)
@@ -1224,7 +1224,7 @@ importers:
         version: 0.45.2(@libsql/client@0.15.15)(@neondatabase/serverless@1.1.0)(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(@types/pg@8.20.0)(better-sqlite3@12.8.0)(kysely@0.28.15)(pg@8.20.0)(postgres@3.4.9)
       h3:
         specifier: ^2.0.1-rc.20
-        version: 2.0.1-rc.22(crossws@0.4.5(srvx@0.11.16))
+        version: 2.0.1-rc.22(crossws@0.4.6(srvx@0.11.16))
       isbot:
         specifier: ^5
         version: 5.1.40
@@ -1480,7 +1480,7 @@ importers:
         version: 0.45.2(@libsql/client@0.15.15)(@neondatabase/serverless@1.1.0)(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(@types/pg@8.20.0)(better-sqlite3@12.8.0)(kysely@0.28.15)(pg@8.20.0)(postgres@3.4.9)
       h3:
         specifier: ^2.0.1-rc.20
-        version: 2.0.1-rc.22(crossws@0.4.5(srvx@0.11.16))
+        version: 2.0.1-rc.22(crossws@0.4.6(srvx@0.11.16))
       isbot:
         specifier: ^5
         version: 5.1.40
@@ -1628,7 +1628,7 @@ importers:
         version: 0.45.2(@libsql/client@0.15.15)(@neondatabase/serverless@1.1.0)(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(@types/pg@8.20.0)(better-sqlite3@12.8.0)(kysely@0.28.15)(pg@8.20.0)(postgres@3.4.9)
       h3:
         specifier: ^2.0.1-rc.22
-        version: 2.0.1-rc.22(crossws@0.4.5(srvx@0.11.16))
+        version: 2.0.1-rc.22(crossws@0.4.6(srvx@0.11.16))
       isbot:
         specifier: ^5.1.40
         version: 5.1.40
@@ -1758,7 +1758,7 @@ importers:
         version: 0.45.2(@libsql/client@0.15.15)(@neondatabase/serverless@1.1.0)(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(@types/pg@8.20.0)(better-sqlite3@12.8.0)(kysely@0.28.15)(pg@8.20.0)(postgres@3.4.9)
       h3:
         specifier: ^2.0.1-rc.20
-        version: 2.0.1-rc.22(crossws@0.4.5(srvx@0.11.16))
+        version: 2.0.1-rc.22(crossws@0.4.6(srvx@0.11.16))
       isbot:
         specifier: ^5
         version: 5.1.40
@@ -1996,7 +1996,7 @@ importers:
         version: 5.3.0
       h3:
         specifier: ^2.0.1-rc.20
-        version: 2.0.1-rc.22(crossws@0.4.5(srvx@0.11.16))
+        version: 2.0.1-rc.22(crossws@0.4.6(srvx@0.11.16))
       isbot:
         specifier: ^5
         version: 5.1.40
@@ -2340,7 +2340,7 @@ importers:
         version: 5.3.0
       h3:
         specifier: ^2.0.1-rc.20
-        version: 2.0.1-rc.22(crossws@0.4.5(srvx@0.11.16))
+        version: 2.0.1-rc.22(crossws@0.4.6(srvx@0.11.16))
       highlight.js:
         specifier: ^11.11.1
         version: 11.11.1
@@ -2503,7 +2503,7 @@ importers:
         version: 0.45.2(@libsql/client@0.15.15)(@neondatabase/serverless@1.1.0)(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(@types/pg@8.20.0)(better-sqlite3@12.8.0)(kysely@0.28.15)(pg@8.20.0)(postgres@3.4.9)
       h3:
         specifier: ^2.0.1-rc.20
-        version: 2.0.1-rc.22(crossws@0.4.5(srvx@0.11.16))
+        version: 2.0.1-rc.22(crossws@0.4.6(srvx@0.11.16))
       html2canvas:
         specifier: ^1.4.1
         version: 1.4.1
@@ -2732,7 +2732,7 @@ importers:
         version: 5.100.10(react@19.2.7)
       h3:
         specifier: ^2.0.1-rc.20
-        version: 2.0.1-rc.22(crossws@0.4.5(srvx@0.11.16))
+        version: 2.0.1-rc.22(crossws@0.4.6(srvx@0.11.16))
       isbot:
         specifier: ^5
         version: 5.1.40
@@ -2862,7 +2862,7 @@ importers:
         version: 8.6.0(react@19.2.7)
       h3:
         specifier: ^2.0.1-rc.20
-        version: 2.0.1-rc.22(crossws@0.4.5(srvx@0.11.16))
+        version: 2.0.1-rc.22(crossws@0.4.6(srvx@0.11.16))
       input-otp:
         specifier: ^1.4.2
         version: 1.4.2(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -3034,7 +3034,7 @@ importers:
         version: 0.45.2(@libsql/client@0.15.15)(@neondatabase/serverless@1.1.0)(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(@types/pg@8.20.0)(better-sqlite3@12.8.0)(kysely@0.28.15)(pg@8.20.0)(postgres@3.4.9)
       h3:
         specifier: ^2.0.1-rc.20
-        version: 2.0.1-rc.22(crossws@0.4.5(srvx@0.11.16))
+        version: 2.0.1-rc.22(crossws@0.4.6(srvx@0.11.16))
       isbot:
         specifier: ^5
         version: 5.1.40
@@ -3251,7 +3251,7 @@ importers:
         version: 8.6.0(react@19.2.7)
       h3:
         specifier: ^2.0.1-rc.20
-        version: 2.0.1-rc.22(crossws@0.4.5(srvx@0.11.16))
+        version: 2.0.1-rc.22(crossws@0.4.6(srvx@0.11.16))
       input-otp:
         specifier: ^1.4.2
         version: 1.4.2(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -3525,7 +3525,7 @@ importers:
         version: 4.0.3
       h3:
         specifier: ^2.0.1-rc.20
-        version: 2.0.1-rc.22(crossws@0.4.5(srvx@0.11.16))
+        version: 2.0.1-rc.22(crossws@0.4.6(srvx@0.11.16))
       html2canvas:
         specifier: ^1.4.1
         version: 1.4.1
@@ -3835,7 +3835,7 @@ importers:
         version: 5.7.2
       h3:
         specifier: ^2.0.1-rc.20
-        version: 2.0.1-rc.22(crossws@0.4.5(srvx@0.11.16))
+        version: 2.0.1-rc.22(crossws@0.4.6(srvx@0.11.16))
       isbot:
         specifier: ^5
         version: 5.1.40
@@ -4112,7 +4112,7 @@ importers:
         version: 3.44.0(react@19.2.7)
       h3:
         specifier: ^2.0.1-rc.20
-        version: 2.0.1-rc.22(crossws@0.4.5(srvx@0.11.16))
+        version: 2.0.1-rc.22(crossws@0.4.6(srvx@0.11.16))
       isbot:
         specifier: ^5
         version: 5.1.40
@@ -4332,7 +4332,7 @@ importers:
         version: 0.45.2(@libsql/client@0.15.15)(@neondatabase/serverless@1.1.0)(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(@types/pg@8.20.0)(better-sqlite3@12.8.0)(kysely@0.28.15)(pg@8.20.0)(postgres@3.4.9)
       h3:
         specifier: ^2.0.1-rc.20
-        version: 2.0.1-rc.22(crossws@0.4.5(srvx@0.11.16))
+        version: 2.0.1-rc.22(crossws@0.4.6(srvx@0.11.16))
       isbot:
         specifier: ^5
         version: 5.1.40
@@ -12087,6 +12087,14 @@ packages:
       srvx:
         optional: true
 
+  crossws@0.4.6:
+    resolution: {integrity: sha512-/Wxe9Z007EbJ496j88nToZEvyPZ8PY/wjZJ18Agh/GCA9cYHyLbxtrpdFlFzAw3TV20F0SUYGl0g6PzChbwUrg==}
+    peerDependencies:
+      srvx: '>=0.11.5'
+    peerDependenciesMeta:
+      srvx:
+        optional: true
+
   css-line-break@2.1.0:
     resolution: {integrity: sha512-FHcKFCZcAha3LwfVBhCQbW2nCNbkZXn7KVUJcsT5/P8YmfsVja0FMPJr0B903j/E69HUphKiV9iQArX8SDYA4w==}
 
@@ -12732,19 +12740,22 @@ packages:
     resolution: {integrity: sha512-+h1lkLKhZMTYjog1VEpJNG7NZJWcuc2DDk/qsqSTRRCOXiLjeQ1d1/udrUGhqMxUgAlwKNZ0cf2uqan5GLuS2A==}
     engines: {node: '>=6'}
 
-  env-runner@0.1.11:
-    resolution: {integrity: sha512-fJfI87qPE7DxBD4EwYUuAlokWBOj9AnE6BmQxezCIQGBge/D7rp0kNTuOzSyJyjiQSGvFdpv/SPrOokPlTfA4Q==}
+  env-runner@0.1.14:
+    resolution: {integrity: sha512-qdk5mmgFsd+zPg3r1bkZ+IbvpfUfypyDvNhMGypSMRpz7kOa/kI6SpW8fgyukuEM4Lo24M65r+1Ne0DtT7vFBA==}
     hasBin: true
     peerDependencies:
       '@netlify/runtime': ^4.1.23
       '@vercel/queue': ^0.2.0
       miniflare: ^4.20260515.0
+      wrangler: ^4.0.0
     peerDependenciesMeta:
       '@netlify/runtime':
         optional: true
       '@vercel/queue':
         optional: true
       miniflare:
+        optional: true
+      wrangler:
         optional: true
 
   err-code@2.0.3:
@@ -14942,15 +14953,15 @@ packages:
   nf3@0.3.17:
     resolution: {integrity: sha512-N9zEWySuJFw+gR0lhS5863YsvNeudOdqRyFvNb+jMXbeTJOdrjDqkCpDginIZfUm0LzT1t1nCRiDeqQm/8kirQ==}
 
-  nitro@3.0.260415-beta:
-    resolution: {integrity: sha512-J0ntJERWtIdvweZdmkCiF8eOFvP9fIAJR2gpeIDrHbAlYavK41WQfADo/YoZ/LF7RMTZBiPaH/pt2s/nPru9Iw==}
+  nitro@3.0.260610-beta:
+    resolution: {integrity: sha512-KPb4L5yaF/Rx/xoGMpgHRJvZhbhGiqbRKOwwPLCH9jKTKTsEUHLjnJas85AeCzaswqa8Wi52eQBtRsODC4PS0Q==}
     engines: {node: ^20.19.0 || >=22.12.0}
     hasBin: true
     peerDependencies:
-      '@vercel/queue': ^0.1.4
+      '@vercel/queue': ^0.3.0
       dotenv: '*'
       giget: '*'
-      jiti: ^2.6.1
+      jiti: ^2.7.0
       rollup: '>=4.59.0'
       vite: ^7 || ^8
       xml2js: ^0.6.2
@@ -15069,8 +15080,8 @@ packages:
   obug@2.1.1:
     resolution: {integrity: sha512-uTqF9MuPraAQ+IsnPf366RG4cP9RtUi7MLO1N3KEc+wb0a6yKpeL0lmk2IB1jY5KHPAlTc6T/JRdC/YqxHNwkQ==}
 
-  ocache@0.1.4:
-    resolution: {integrity: sha512-e7geNdWjxSnvsSgvLuPvgKgu7ubM10ZmTPOgpr7mz2BXYtvjMKTiLhjFi/gWU8chkuP6hNkZBsa9LzOusyaqkQ==}
+  ocache@0.1.5:
+    resolution: {integrity: sha512-kNNnkkVQup/QDvmTz8Q84wc2ntiyoVHDxa6eHWKt5qdGAmFRBIxy83rxgCYEjW0x06UJ9E3P6VgM2yY4rOBH4w==}
 
   ofetch@2.0.0-alpha.3:
     resolution: {integrity: sha512-zpYTCs2byOuft65vI3z43Dd6iSdFbOZZLb9/d21aCpx2rGastVU9dOCv0lu4ykc1Ur1anAYjDi3SUvR0vq50JA==}
@@ -26158,6 +26169,10 @@ snapshots:
     optionalDependencies:
       srvx: 0.11.16
 
+  crossws@0.4.6(srvx@0.11.16):
+    optionalDependencies:
+      srvx: 0.11.16
+
   css-line-break@2.1.0:
     dependencies:
       utrie: 1.0.2
@@ -26751,12 +26766,14 @@ snapshots:
 
   env-paths@2.2.1: {}
 
-  env-runner@0.1.11:
+  env-runner@0.1.14(wrangler@4.81.0):
     dependencies:
-      crossws: 0.4.5(srvx@0.11.16)
+      crossws: 0.4.6(srvx@0.11.16)
       exsolve: 1.0.8
       httpxy: 0.5.3
       srvx: 0.11.16
+    optionalDependencies:
+      wrangler: 4.81.0
 
   err-code@2.0.3: {}
 
@@ -27821,12 +27838,12 @@ snapshots:
       ufo: 1.6.3
       uncrypto: 0.1.3
 
-  h3@2.0.1-rc.22(crossws@0.4.5(srvx@0.11.16)):
+  h3@2.0.1-rc.22(crossws@0.4.6(srvx@0.11.16)):
     dependencies:
       rou3: 0.8.1
       srvx: 0.11.15
     optionalDependencies:
-      crossws: 0.4.5(srvx@0.11.16)
+      crossws: 0.4.6(srvx@0.11.16)
 
   hachure-fill@0.5.2: {}
 
@@ -30027,16 +30044,16 @@ snapshots:
 
   nf3@0.3.17: {}
 
-  nitro@3.0.260415-beta(@libsql/client@0.15.15)(better-sqlite3@12.8.0)(chokidar@4.0.3)(dotenv@17.4.0)(drizzle-orm@0.45.2(@libsql/client@0.15.15)(@neondatabase/serverless@1.1.0)(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(@types/pg@8.20.0)(better-sqlite3@12.8.0)(kysely@0.28.15)(pg@8.20.0)(postgres@3.4.9))(giget@3.2.0)(ioredis@5.10.1)(jiti@2.6.1)(lru-cache@11.3.6)(rollup@4.60.1)(vite@8.0.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@24.12.2)(esbuild@0.27.7)(jiti@2.6.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0)):
+  nitro@3.0.260610-beta(@libsql/client@0.15.15)(better-sqlite3@12.8.0)(chokidar@4.0.3)(dotenv@17.4.0)(drizzle-orm@0.45.2(@libsql/client@0.15.15)(@neondatabase/serverless@1.1.0)(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(@types/pg@8.20.0)(better-sqlite3@12.8.0)(kysely@0.28.15)(pg@8.20.0)(postgres@3.4.9))(giget@3.2.0)(ioredis@5.10.1)(jiti@2.6.1)(lru-cache@11.3.6)(rollup@4.60.1)(vite@8.0.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@24.12.2)(esbuild@0.27.7)(jiti@2.6.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(wrangler@4.81.0):
     dependencies:
       consola: 3.4.2
-      crossws: 0.4.5(srvx@0.11.16)
+      crossws: 0.4.6(srvx@0.11.16)
       db0: 0.3.4(@libsql/client@0.15.15)(better-sqlite3@12.8.0)(drizzle-orm@0.45.2(@libsql/client@0.15.15)(@neondatabase/serverless@1.1.0)(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(@types/pg@8.20.0)(better-sqlite3@12.8.0)(kysely@0.28.15)(pg@8.20.0)(postgres@3.4.9))
-      env-runner: 0.1.11
-      h3: 2.0.1-rc.22(crossws@0.4.5(srvx@0.11.16))
+      env-runner: 0.1.14(wrangler@4.81.0)
+      h3: 2.0.1-rc.22(crossws@0.4.6(srvx@0.11.16))
       hookable: 6.1.1
       nf3: 0.3.17
-      ocache: 0.1.4
+      ocache: 0.1.5
       ofetch: 2.0.0-alpha.3
       ohash: 2.0.11
       rolldown: 1.1.0
@@ -30079,6 +30096,7 @@ snapshots:
       - mysql2
       - sqlite3
       - uploadthing
+      - wrangler
 
   node-abi@3.89.0:
     dependencies:
@@ -30173,7 +30191,7 @@ snapshots:
 
   obug@2.1.1: {}
 
-  ocache@0.1.4:
+  ocache@0.1.5:
     dependencies:
       ohash: 2.0.11
 
