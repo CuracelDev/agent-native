@@ -21,6 +21,7 @@ import {
   appBasePath,
   appPath,
   useSession,
+  AgentPanel,
 } from "@agent-native/core/client";
 import {
   VideoPlayer,
@@ -804,9 +805,22 @@ export default function ShareRoute() {
           </TabsList>
           <TabsContent
             value="agent"
-            className="mt-3 min-h-0 flex-1 data-[state=inactive]:hidden"
+            className="mt-0 flex min-h-0 flex-1 flex-col data-[state=inactive]:hidden"
           >
-            <PublicAgentEmptyState />
+            {sessionLoading ? null : session ? (
+              <AgentPanel
+                emptyStateText="Ask about this clip…"
+                dynamicSuggestions={false}
+                suggestions={[
+                  "Summarize this clip",
+                  "Find the key moments",
+                  "List follow-up actions",
+                  "Draft questions for the author",
+                ]}
+              />
+            ) : (
+              <PublicAgentEmptyState />
+            )}
           </TabsContent>
           <TabsContent
             value="transcript"
