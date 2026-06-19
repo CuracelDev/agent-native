@@ -10,6 +10,7 @@ import { useLoaderData, useNavigate, useParams } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
   IconAlertTriangle,
+  IconArrowLeft,
   IconDownload,
   IconExternalLink,
   IconLogin2,
@@ -630,6 +631,16 @@ export default function ShareRoute() {
       {agentDiscovery}
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex shrink-0 flex-wrap items-center gap-3 border-b border-border px-4 py-3 lg:flex-nowrap">
+          {session ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate("/")}
+              aria-label="Back to home"
+            >
+              <IconArrowLeft className="h-4 w-4" />
+            </Button>
+          ) : null}
           <div className="min-w-0 flex-1">
             {showTitleSkeleton ? (
               <Skeleton
@@ -652,7 +663,7 @@ export default function ShareRoute() {
                   <IconExternalLink className="h-3.5 w-3.5 shrink-0" />
                 </a>
               </Button>
-            ) : (
+            ) : session ? null : (
               <Button variant="ghost" size="sm" asChild>
                 <a href={appPath("/")} className="gap-1.5">
                   Try Clips
