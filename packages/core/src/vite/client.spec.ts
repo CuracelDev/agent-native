@@ -9,6 +9,7 @@ import {
   _getReactRouterAliases,
   defineConfig,
   isFrameworkDevPath,
+  isFrameworkDynamicDevPath,
   stripMountedDevApiPath,
 } from "./client.js";
 import { signEmbedSessionToken } from "../server/embed-session.js";
@@ -58,6 +59,64 @@ describe("dev server mounted path helpers", () => {
     expect(isFrameworkDevPath("/docs-extra/_agent-native/ping", "/docs/")).toBe(
       false,
     );
+  });
+
+  it("treats framework + well-known paths as dynamic for the dev forwarder", () => {
+    // Extension-bearing framework endpoints that Nitro's dev asset heuristic
+    // would otherwise hand to Vite (→ 404) must be marked dynamic.
+    expect(
+      isFrameworkDynamicDevPath("/_agent-native/speculation-rules.json", "/"),
+    ).toBe(true);
+    expect(isFrameworkDynamicDevPath("/.well-known/agent-card.json", "/")).toBe(
+      true,
+    );
+    expect(
+      isFrameworkDynamicDevPath(
+        "/docs/_agent-native/speculation-rules.json",
+        "/docs/",
+      ),
+    ).toBe(true);
+    expect(
+      isFrameworkDynamicDevPath("/docs/.well-known/agent-card.json", "/docs/"),
+    ).toBe(true);
+    // Real Vite/static assets must NOT be forwarded.
+    expect(isFrameworkDynamicDevPath("/assets/logo.png", "/")).toBe(false);
+    expect(isFrameworkDynamicDevPath("/favicon.ico", "/")).toBe(false);
+  });
+
+  it("forces Nitro's dev classifier to treat framework assets as dynamic", () => {
+    const plugin = findPlugin(
+      "agent-native-framework-dev-dynamic-forwarder",
+    );
+    let middleware: Function | null = null;
+    const server = {
+      config: { base: "/" },
+      middlewares: {
+        use: vi.fn((fn: Function) => {
+          middleware = fn;
+        }),
+      },
+    };
+    plugin.configureServer(server as any);
+    expect(typeof middleware).toBe("function");
+
+    const req: any = {
+      url: "/_agent-native/speculation-rules.json",
+      headers: { accept: "application/json", "sec-fetch-dest": "empty" },
+    };
+    const next = vi.fn();
+    (middleware as unknown as Function)(req, {}, next);
+    expect(req.headers.accept).toContain("text/html");
+    expect(req.headers["sec-fetch-dest"]).toBe("empty");
+    expect(next).toHaveBeenCalledOnce();
+
+    // Non-framework asset requests are left untouched.
+    const assetReq: any = {
+      url: "/assets/logo.png",
+      headers: { accept: "image/png" },
+    };
+    (middleware as unknown as Function)(assetReq, {}, vi.fn());
+    expect(assetReq.headers.accept).toBe("image/png");
   });
 
   it("serves base-prefixed Vite module requests for embed sessions", async () => {

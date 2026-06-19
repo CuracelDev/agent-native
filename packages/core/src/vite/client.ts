@@ -823,6 +823,47 @@ function baseRedirectGuard(): Plugin {
   };
 }
 
+/**
+ * Force Nitro's dev middleware to treat extension-bearing framework endpoints
+ * as dynamic so they reach the h3 server instead of Vite's static pipeline.
+ *
+ * Nitro's Vite dev middleware (nitro/dist/_build/vite.dev.mjs) routes any
+ * request whose path has an asset-like extension (`.json`, `.png`, …) to Vite
+ * unless a Nitro *route* matches it — it inspects the file extension plus the
+ * `sec-fetch-dest`/`accept` headers. Framework endpoints
+ * (`/_agent-native/*`, framework `/.well-known/*`) are registered as h3
+ * middleware, which is invisible to Nitro's route table, so paths like
+ * `/_agent-native/speculation-rules.json` or `/.well-known/agent-card.json`
+ * get misclassified as static assets and 404 in Vite before ever reaching the
+ * server. Production builds don't run this heuristic, so the bug is dev-only.
+ *
+ * We can't register these as Nitro routes (they're h3 middleware by design), so
+ * we neutralize the classifier for framework paths: declaring `accept:
+ * text/html` and `sec-fetch-dest: empty` makes Nitro's `isAsset` check false,
+ * so the request falls through to Nitro's catch-all dev handler and the h3 app.
+ * Our handlers set their own response content-type, so the spoofed `accept`
+ * header doesn't affect what they return.
+ */
+function frameworkDevDynamicForwarder(): Plugin {
+  return {
+    name: "agent-native-framework-dev-dynamic-forwarder",
+    apply: "serve",
+    configureServer(server) {
+      server.middlewares.use((req, _res, next) => {
+        const url = req.url;
+        if (url && isFrameworkDynamicDevPath(url, server.config.base)) {
+          const accept = req.headers["accept"];
+          if (typeof accept !== "string" || !/\btext\/html\b/.test(accept)) {
+            req.headers["accept"] = accept ? `text/html,${accept}` : "text/html";
+          }
+          req.headers["sec-fetch-dest"] = "empty";
+        }
+        next();
+      });
+    },
+  };
+}
+
 const VITE_RUNTIME_PATH_PREFIXES = [
   "/@fs/",
   "/@id/",
@@ -1160,6 +1201,26 @@ export function isFrameworkDevPath(
     pathname === `${normalizedBase}/_agent-native` ||
     pathname.startsWith(`${normalizedBase}/_agent-native/`)
   );
+}
+
+/**
+ * Framework-owned dynamic dev paths whose responses are served by the h3 app:
+ * the `/_agent-native/*` API surface plus the framework `/.well-known/*`
+ * documents (agent-card.json, MCP OAuth metadata, …). Used to keep Nitro's dev
+ * asset heuristic from intercepting their extension-bearing URLs.
+ */
+export function isFrameworkDynamicDevPath(
+  reqUrl: string,
+  base: string | undefined,
+): boolean {
+  if (isFrameworkDevPath(reqUrl, base)) return true;
+  const pathname = devPathname(reqUrl);
+  if (pathname.startsWith("/.well-known/")) return true;
+  if (base && base !== "/") {
+    const normalizedBase = base.endsWith("/") ? base.slice(0, -1) : base;
+    if (pathname.startsWith(`${normalizedBase}/.well-known/`)) return true;
+  }
+  return false;
 }
 
 /**
@@ -1584,6 +1645,7 @@ export function defineConfig(options: ClientConfigOptions = {}): UserConfig {
       fullReloadOnOptimizeDep504(),
       embedDevFrameHeaders(),
       baseRedirectGuard(),
+      frameworkDevDynamicForwarder(),
       portExposer(),
       silenceConnectionResets(),
       rolldownInputFix(),
