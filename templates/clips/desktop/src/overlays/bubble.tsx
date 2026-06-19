@@ -259,8 +259,34 @@ export function Bubble() {
     let startUnlisten: (() => void) | null = null;
     let stopUnlisten: (() => void) | null = null;
     let refreshMicsUnlisten: (() => void) | null = null;
+    let meterStartUnlisten: (() => void) | null = null;
+    let meterStopUnlisten: (() => void) | null = null;
     let renderedFrames = 0;
     let lastFpsLogAt = 0;
+
+    // Live mic meter session. The popover delegates this to us because opening a
+    // mic in its own page would mute this bubble's camera (WebKit cross-page
+    // capture-exclusion). Opening the mic HERE — same page as our camera — does
+    // not mute it, so we run the analyser and relay level samples to the popover.
+    let meterStream: MediaStream | null = null;
+    let meterCtx: AudioContext | null = null;
+    let meterTimer: ReturnType<typeof setInterval> | null = null;
+    let meterMicId: string | null = null;
+    const stopMicMeter = () => {
+      if (meterTimer) {
+        clearInterval(meterTimer);
+        meterTimer = null;
+      }
+      if (meterCtx) {
+        meterCtx.close().catch(() => {});
+        meterCtx = null;
+      }
+      if (meterStream) {
+        meterStream.getTracks().forEach((t) => t.stop());
+        meterStream = null;
+      }
+      meterMicId = null;
+    };
 
     const stopLocalCanvasRenderer = () => {
       const videoEl = videoRef.current;
@@ -509,8 +535,89 @@ export function Bubble() {
       })
       .catch(() => {});
 
+    // Start the live mic meter on request and emit level samples the popover
+    // renders. We open the mic here (same page as our camera) so the bubble
+    // stays live instead of getting muted.
+    listen<{ micId?: string | null; bars?: number }>(
+      "clips:mic-meter-start",
+      async (event) => {
+        if (stopped) return;
+        const micId = event.payload?.micId?.trim() || null;
+        // Ignore idempotent repeats for the same device (the popover re-sends on
+        // bubble-ready and on a show-bubble timer to beat the mount race).
+        if (meterStream && meterMicId === micId) return;
+        stopMicMeter();
+        const barCount = Math.max(1, event.payload?.bars ?? 18);
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            audio: micId ? { deviceId: { exact: micId } } : true,
+            video: false,
+          });
+          if (stopped) {
+            stream.getTracks().forEach((t) => t.stop());
+            return;
+          }
+          meterStream = stream;
+          meterMicId = micId;
+          const ctx = new AudioContext();
+          meterCtx = ctx;
+          const sourceNode = ctx.createMediaStreamSource(stream);
+          const analyser = ctx.createAnalyser();
+          analyser.fftSize = 64;
+          analyser.smoothingTimeConstant = 0.7;
+          sourceNode.connect(analyser);
+          const data = new Uint8Array(analyser.frequencyBinCount);
+          meterTimer = setInterval(() => {
+            analyser.getByteFrequencyData(data);
+            const usable = Math.floor(data.length * 0.7);
+            const levels: number[] = [];
+            for (let i = 0; i < barCount; i++) {
+              const idx = Math.min(
+                usable - 1,
+                Math.floor((i / barCount) * usable),
+              );
+              levels.push(data[idx] / 255);
+            }
+            emit("clips:mic-level", { levels }).catch(() => {});
+          }, 50);
+        } catch (err) {
+          console.warn("[bubble] mic meter failed", err);
+          stopMicMeter();
+        }
+      },
+    )
+      .then((u) => {
+        if (stopped) {
+          try {
+            u();
+          } catch {
+            // ignore
+          }
+        } else {
+          meterStartUnlisten = u;
+        }
+      })
+      .catch(() => {});
+
+    listen("clips:mic-meter-stop", () => {
+      stopMicMeter();
+    })
+      .then((u) => {
+        if (stopped) {
+          try {
+            u();
+          } catch {
+            // ignore
+          }
+        } else {
+          meterStopUnlisten = u;
+        }
+      })
+      .catch(() => {});
+
     return () => {
       stopped = true;
+      stopMicMeter();
       try {
         startUnlisten?.();
       } catch {
@@ -523,6 +630,16 @@ export function Bubble() {
       }
       try {
         refreshMicsUnlisten?.();
+      } catch {
+        // ignore
+      }
+      try {
+        meterStartUnlisten?.();
+      } catch {
+        // ignore
+      }
+      try {
+        meterStopUnlisten?.();
       } catch {
         // ignore
       }

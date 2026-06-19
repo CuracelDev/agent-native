@@ -2436,6 +2436,7 @@ export function App() {
           systemAudio={systemAudioOn}
           onSystemAudioToggle={setSystemAudioOn}
           meterActive={popoverVisible && !isRecording}
+          meterRelay={bubbleActive}
         />
       </div>
 
