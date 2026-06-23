@@ -126,6 +126,11 @@ export class MutableModel {
 }
 
 const MODEL_MINT_KEY = Symbol("builder-autosave-contract/model-mint-key");
+// Freeze the class object + prototype so the static guard `.is` cannot be
+// monkey-patched at runtime (`(MutableModel as any).is = () => true`) to wave a
+// forged token through the mutators.
+Object.freeze(MutableModel);
+Object.freeze(MutableModel.prototype);
 
 /**
  * Gate live writes by model. A live run refuses to mutate unless the target
@@ -193,6 +198,9 @@ export class MutableTarget {
 }
 
 const TARGET_MINT_KEY = Symbol("builder-autosave-contract/target-mint-key");
+// Freeze (see MutableModel) so `.is` can't be monkey-patched to accept forgeries.
+Object.freeze(MutableTarget);
+Object.freeze(MutableTarget.prototype);
 
 /**
  * A registry of entries this run created. It is the ONLY source of

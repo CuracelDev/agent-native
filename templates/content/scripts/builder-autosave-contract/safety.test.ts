@@ -117,6 +117,19 @@ describe("token minting surface is closed (no public bypass)", () => {
     }).toThrow(TypeError);
     expect(target.model).toBe(TEST_MODEL);
   });
+
+  it("the static guard cannot be monkey-patched (frozen class)", () => {
+    expect(() => {
+      (MutableModel as unknown as { is: unknown }).is = () => true;
+    }).toThrow(TypeError);
+    expect(() => {
+      (MutableTarget as unknown as { is: unknown }).is = () => true;
+    }).toThrow(TypeError);
+    // A forged object still fails the (un-patchable) guard.
+    expect(MutableTarget.is({ model: "blog-article", entryId: "x" })).toBe(
+      false,
+    );
+  });
 });
 
 describe("ThrowawayRegistry chokepoint", () => {
