@@ -80,8 +80,14 @@ export function isTestModelName(model: string | undefined): boolean {
 
 /**
  * An opaque capability token proving a model passed the live-write gate. It is
- * required to CREATE an entry (which has no id to vet yet). The private
- * constructor means it can only be produced by `assertModelAllowedForLive`.
+ * required to CREATE an entry (which has no id to vet yet).
+ *
+ * Construction is gated by `MODEL_MINT_KEY`, a module-private symbol that is
+ * never exported. The class is exported (for `.is()` and the parameter type),
+ * but the constructor throws unless handed that key — and the key lives only in
+ * this module, so the ONLY way to obtain a token is `assertModelAllowedForLive`
+ * (which enforces the model gate first). There is deliberately no public mint
+ * method.
  */
 export class MutableModel {
   // NOTE: no TS "parameter properties" anywhere in this file — Node's
@@ -89,11 +95,14 @@ export class MutableModel {
   // harness runs under that flag. Declare fields explicitly and assign in body.
   private readonly brand: typeof MUTABLE_MODEL_BRAND = MUTABLE_MODEL_BRAND;
   readonly model: string;
-  private constructor(model: string) {
+  constructor(key: symbol, model: string) {
+    if (key !== MODEL_MINT_KEY) {
+      throw new Error(
+        "SAFETY ABORT: MutableModel cannot be constructed directly — a token " +
+          "is obtainable only from assertModelAllowedForLive().",
+      );
+    }
     this.model = model;
-  }
-  static __mint(model: string): MutableModel {
-    return new MutableModel(model);
   }
   static is(value: unknown): value is MutableModel {
     return value instanceof MutableModel && value.brand === MUTABLE_MODEL_BRAND;
@@ -101,6 +110,7 @@ export class MutableModel {
 }
 
 const MUTABLE_MODEL_BRAND = Symbol("builder-autosave-contract/mutable-model");
+const MODEL_MINT_KEY = Symbol("builder-autosave-contract/model-mint-key");
 
 /**
  * Gate live writes by model. A live run refuses to mutate unless the target
@@ -113,7 +123,7 @@ export function assertModelAllowedForLive(
   allowModels: readonly string[],
 ): MutableModel {
   if (isTestModelName(model) || allowModels.includes(model)) {
-    return MutableModel.__mint(model);
+    return new MutableModel(MODEL_MINT_KEY, model);
   }
   throw new Error(
     `SAFETY ABORT: refusing live writes into model ${JSON.stringify(model)} — ` +
@@ -128,27 +138,30 @@ export function assertModelAllowedForLive(
  * by the registry: the entry was created by THIS run, its name carries the
  * throwaway prefix, and its model passed the live-model gate.
  *
- * The constructor is `private`, so no code outside this module can build one —
- * a caller cannot forge a token from a bare string id. The only way to obtain a
- * `MutableTarget` is through `ThrowawayRegistry`, which mints one only after the
- * name + model checks pass. Client mutators accept `MutableTarget`, never a
- * bare id, so an unvetted write is unrepresentable. `MutableTarget.is` gives a
- * runtime guard (defense in depth against plain objects coerced via `any`).
+ * Construction is gated by `TARGET_MINT_KEY`, a module-private symbol that is
+ * never exported, so no code outside this module can build one — a caller
+ * cannot forge a token from a bare string id. The only way to obtain a
+ * `MutableTarget` is through `ThrowawayRegistry`, which constructs one only
+ * after the name + model checks pass. Client mutators accept `MutableTarget`,
+ * never a bare id, so an unvetted write is unrepresentable. `MutableTarget.is`
+ * gives a runtime guard (defense in depth against plain objects coerced via
+ * `any`).
  */
 export class MutableTarget {
   private readonly brand: typeof MUTABLE_TARGET_BRAND = MUTABLE_TARGET_BRAND;
   readonly model: string;
   readonly entryId: string;
   readonly name: string;
-  private constructor(model: string, entryId: string, name: string) {
+  constructor(key: symbol, model: string, entryId: string, name: string) {
+    if (key !== TARGET_MINT_KEY) {
+      throw new Error(
+        "SAFETY ABORT: MutableTarget cannot be constructed directly — a token " +
+          "is obtainable only through ThrowawayRegistry.",
+      );
+    }
     this.model = model;
     this.entryId = entryId;
     this.name = name;
-  }
-
-  /** Module-internal mint path. Not exported; only the registry calls it. */
-  static __mint(model: string, entryId: string, name: string): MutableTarget {
-    return new MutableTarget(model, entryId, name);
   }
 
   /** Runtime check used by client mutators to reject forged/plain objects. */
@@ -160,6 +173,7 @@ export class MutableTarget {
 }
 
 const MUTABLE_TARGET_BRAND = Symbol("builder-autosave-contract/mutable-target");
+const TARGET_MINT_KEY = Symbol("builder-autosave-contract/target-mint-key");
 
 /**
  * A registry of entries this run created. It is the ONLY source of
@@ -197,7 +211,7 @@ export class ThrowawayRegistry {
     this.ids.add(id);
     this.names.set(id, name);
     this.models.set(id, model);
-    return MutableTarget.__mint(model, id, name);
+    return new MutableTarget(TARGET_MINT_KEY, model, id, name);
   }
 
   /**
@@ -223,7 +237,7 @@ export class ThrowawayRegistry {
     }
     const model = this.models.get(id) ?? "";
     assertModelAllowedForLive(model, this.allowModels);
-    return MutableTarget.__mint(model, id, name);
+    return new MutableTarget(TARGET_MINT_KEY, model, id, name);
   }
 
   list(): { id: string; name: string; model: string }[] {

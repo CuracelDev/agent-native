@@ -49,6 +49,40 @@ describe("model gate (assertModelAllowedForLive)", () => {
   });
 });
 
+describe("token minting surface is closed (no public bypass)", () => {
+  it("exposes no public mint method on the token classes", () => {
+    expect((MutableModel as unknown as { __mint?: unknown }).__mint).toBe(
+      undefined,
+    );
+    expect((MutableTarget as unknown as { __mint?: unknown }).__mint).toBe(
+      undefined,
+    );
+  });
+
+  it("refuses direct construction without the module-private mint key", () => {
+    // A caller cannot forge a valid token by constructing one directly with an
+    // arbitrary symbol — the only minters live inside safety.ts.
+    expect(
+      () => new MutableModel(Symbol("attacker"), "blog-article"),
+    ).toThrow(/SAFETY ABORT/);
+    expect(
+      () => new MutableTarget(Symbol("attacker"), "blog-article", "id", "name"),
+    ).toThrow(/SAFETY ABORT/);
+  });
+
+  it("a directly-constructed token never satisfies the .is() brand check", () => {
+    // Even if construction somehow returned, the throw above prevents it; and a
+    // plain look-alike object is rejected by the brand check.
+    const lookAlike = {
+      model: "blog-article",
+      entryId: "id",
+      name: "name",
+    } as unknown as MutableTarget;
+    expect(MutableTarget.is(lookAlike)).toBe(false);
+    expect(MutableModel.is({ model: "blog-article" })).toBe(false);
+  });
+});
+
 describe("ThrowawayRegistry chokepoint", () => {
   it("mints a MutableTarget only for a registered throwaway entry", () => {
     const reg = new ThrowawayRegistry();
