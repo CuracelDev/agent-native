@@ -180,7 +180,10 @@ export class BuilderContractClient {
     return Boolean(this.config.publicKey);
   }
 
-  private async capture(args: {
+  // `#`-private (not TS `private`): the raw HTTP helpers are unreachable from
+  // outside the class even via an `any` cast, so the only externally-callable
+  // write surface is the token-gated createEntry/patchEntry.
+  async #capture(args: {
     label: string;
     method: string;
     url: string;
@@ -224,7 +227,7 @@ export class BuilderContractClient {
 
   // ---- Write API (requires private key) ----
 
-  private writeHeaders(): Record<string, string> {
+  #writeHeaders(): Record<string, string> {
     return {
       accept: "application/json",
       authorization: `Bearer ${this.config.privateKey ?? ""}`,
@@ -253,11 +256,11 @@ export class BuilderContractClient {
     }
     const model = args.target.model;
     const url = `${this.config.writeHost}/api/v1/write/${encodeURIComponent(model)}`;
-    return this.capture({
+    return this.#capture({
       label: args.label,
       method: "POST",
       url,
-      headers: this.writeHeaders(),
+      headers: this.#writeHeaders(),
       body: args.body,
     });
   }
@@ -287,11 +290,11 @@ export class BuilderContractClient {
     for (const [k, v] of Object.entries(args.query ?? {})) {
       url.searchParams.set(k, v);
     }
-    return this.capture({
+    return this.#capture({
       label: args.label,
       method: "PATCH",
       url: url.toString(),
-      headers: this.writeHeaders(),
+      headers: this.#writeHeaders(),
       body: args.body,
     });
   }
@@ -318,7 +321,7 @@ export class BuilderContractClient {
     url.searchParams.set("apiKey", this.config.publicKey ?? "");
     if (args.includeUnpublished) url.searchParams.set("includeUnpublished", "true");
     if (args.cachebust) url.searchParams.set("cachebust", String(Date.now()));
-    return this.capture({
+    return this.#capture({
       label: args.label,
       method: "GET",
       url: url.toString(),
@@ -347,7 +350,7 @@ export class BuilderContractClient {
     for (const [k, v] of Object.entries(args.query ?? {})) {
       url.searchParams.set(k, v);
     }
-    return this.capture({
+    return this.#capture({
       label: args.label,
       method: "GET",
       url: url.toString(),
