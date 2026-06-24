@@ -3902,6 +3902,7 @@ function ensureWorkspaceRootSkillsLink(
       if (fs.readlinkSync(linkPath) === target) return;
       fs.unlinkSync(linkPath);
     } else {
+      copyScaffoldGuidanceSkills(sharedSkillsDir, linkPath);
       return;
     }
   } catch {}

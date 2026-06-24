@@ -383,8 +383,8 @@ const ENTRIES: FirstPartyMetric[] = [
     source: "first-party",
     width: 2,
     windowed: false,
-    // First-party tracking has no distinct `pageview` event; total tracked
-    // events per day is the honest activity/pageviews proxy over analytics_events.
+    // Browser telemetry emits explicit `pageview` events with URL context, so
+    // keep pageview panels scoped to that event instead of all tracked events.
     buildSql: fixed(
       "SELECT substr(timestamp, 1, 10) AS date, COALESCE(NULLIF(template, ''), NULLIF(app, ''), 'unknown') AS template, COUNT(*) AS count FROM analytics_events WHERE event_name = 'pageview' GROUP BY substr(timestamp, 1, 10), COALESCE(NULLIF(template, ''), NULLIF(app, ''), 'unknown') ORDER BY date, template",
     ),
@@ -433,7 +433,7 @@ const ENTRIES: FirstPartyMetric[] = [
     width: 2,
     windowed: false,
     buildSql: fixed(
-      `WITH clip_views AS (SELECT COALESCE(CASE WHEN NULLIF(hostname, '') IS NOT NULL THEN 'https://' || hostname || COALESCE(NULLIF(path, ''), '/') END, NULLIF(url, ''), NULLIF(path, ''), 'unknown') AS clip, CASE WHEN NULLIF(hostname, '') IS NOT NULL THEN 'https://' || hostname || COALESCE(NULLIF(path, ''), '/') WHEN NULLIF(url, '') LIKE 'http%' THEN url ELSE COALESCE(NULLIF(url, ''), NULLIF(path, ''), '') END AS href, COUNT(*) AS views, COUNT(DISTINCT COALESCE(NULLIF(user_id, ''), NULLIF(anonymous_id, ''))) AS users, MAX(substr(timestamp, 1, 10)) AS last_seen FROM analytics_events WHERE event_name = 'pageview' AND ${DASHBOARD_TIME_RANGE_FILTER} AND ${DASHBOARD_EMAIL_FILTER} AND lower(COALESCE(hostname, '')) = 'clips.agent-native.com' AND COALESCE(path, '') LIKE '/share/%' GROUP BY 1, 2) SELECT clip, views, users, last_seen, href FROM clip_views ORDER BY views DESC LIMIT 25`,
+      `WITH clip_events AS (SELECT COALESCE(NULLIF(properties::jsonb ->> 'recording_id', ''), NULLIF(path, ''), NULLIF(url, ''), 'unknown') AS clip_key, CASE WHEN NULLIF(url, '') LIKE 'http%' THEN url WHEN NULLIF(hostname, '') IS NOT NULL THEN 'https://' || hostname || COALESCE(NULLIF(path, ''), '/') WHEN NULLIF(path, '') LIKE '/%' THEN 'https://clips.agent-native.com' || path ELSE COALESCE(NULLIF(url, ''), '') END AS href, user_id, anonymous_id, timestamp FROM analytics_events WHERE event_name = 'share_view' AND ${DASHBOARD_TIME_RANGE_FILTER} AND ${DASHBOARD_EMAIL_FILTER} AND COALESCE(NULLIF(properties::jsonb ->> 'surface', ''), 'clip') = 'clip'), clip_views AS (SELECT clip_key, COALESCE(MAX(NULLIF(href, '')), clip_key) AS href, COUNT(*) AS views, COUNT(DISTINCT COALESCE(NULLIF(user_id, ''), NULLIF(anonymous_id, ''))) AS users, MAX(substr(timestamp, 1, 10)) AS last_seen FROM clip_events GROUP BY clip_key) SELECT CASE WHEN href LIKE 'http%' THEN href ELSE clip_key END AS clip, views, users, last_seen, href FROM clip_views ORDER BY views DESC LIMIT 25`,
     ),
     config: {
       description: "Most-viewed shared Clips pages in the selected time range.",

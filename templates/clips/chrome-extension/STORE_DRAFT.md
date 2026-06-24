@@ -54,7 +54,7 @@ Upload the generated artifact (the version matches `public/manifest.json`; the
 Chrome Web Store requires each upload to use a higher version than the last):
 
 ```txt
-templates/clips/chrome-extension/releases/clips-chrome-extension-0.1.1.zip
+templates/clips/chrome-extension/releases/clips-chrome-extension-0.1.2.zip
 ```
 
 ## Web App Rollout Gate
