@@ -75,6 +75,11 @@ export default defineAction({
 
     console.log(`Created recording "${title}" (${id})`);
 
+    // Signal that the browser may use the GCS resumable upload path instead of
+    // the chunk-through-app-server path. Only available when Builder.io is the
+    // configured storage provider (it's the source of the resumable session URIs).
+    const supportsResumableUpload = !!process.env.BUILDER_PRIVATE_KEY;
+
     return {
       id,
       organizationId,
@@ -83,6 +88,7 @@ export default defineAction({
       abortUrl: `/api/uploads/${id}/abort`,
       // Frontend substitutes {index}/{total}/{isFinal}
       uploadChunkUrlTemplate: `/api/uploads/${id}/chunk?index={index}&total={total}&isFinal={isFinal}`,
+      supportsResumableUpload,
     };
   },
 });

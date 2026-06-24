@@ -126,6 +126,16 @@ export default defineAction({
       .string()
       .optional()
       .describe("MIME type of the assembled blob (e.g. video/webm)"),
+    videoUrl: z
+      .string()
+      .optional()
+      .describe(
+        "Pre-uploaded video URL (GCS direct upload path). When provided, chunk assembly and server-side upload are skipped.",
+      ),
+    videoSizeBytes: z
+      .number()
+      .optional()
+      .describe("Byte size of the uploaded video file (required with videoUrl)"),
   }),
   run: async (args) => {
     const db = getDb();
@@ -196,6 +206,84 @@ export default defineAction({
         typeof args.hasCamera === "boolean"
           ? args.hasCamera
           : (stateBoolean(uploadState, "hasCamera") ?? existing.hasCamera);
+
+      // Direct upload bypass: the video was already uploaded to GCS by the
+      // browser via a resumable session. Skip chunk assembly and uploadFile().
+      if (args.videoUrl) {
+        const videoUrl = args.videoUrl;
+        const videoSizeBytes = args.videoSizeBytes ?? 0;
+        const now = new Date().toISOString();
+        debugLog("[finalize] direct upload bypass", { id, videoUrl });
+
+        await db
+          .update(schema.recordings)
+          .set({
+            status: "ready",
+            videoUrl,
+            videoFormat,
+            videoSizeBytes,
+            durationMs: finalDurationMs,
+            width: finalWidth,
+            height: finalHeight,
+            hasAudio: finalHasAudio,
+            hasCamera: finalHasCamera,
+            failureReason: null,
+            uploadProgress: 100,
+            updatedAt: now,
+          })
+          .where(eq(schema.recordings.id, id));
+
+        const [existingTranscript] = await db
+          .select({ recordingId: schema.recordingTranscripts.recordingId })
+          .from(schema.recordingTranscripts)
+          .where(eq(schema.recordingTranscripts.recordingId, id));
+        if (!existingTranscript) {
+          await db.insert(schema.recordingTranscripts).values({
+            recordingId: id,
+            ownerEmail,
+            status: "pending",
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+
+        await writeAppState(`recording-upload-${id}`, {
+          recordingId: id,
+          status: "ready",
+          progress: 100,
+          videoUrl,
+          finishedAt: now,
+        });
+        await writeAppState("refresh-signal", { ts: Date.now() });
+
+        void Promise.resolve(
+          requestTranscript.run({ recordingId: id, force: true }),
+        ).catch((err: unknown) => {
+          console.error("[finalize] background transcript failed", {
+            id,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
+
+        try {
+          emit(
+            "clip.created",
+            {
+              clipId: id,
+              title: existing.title,
+              createdBy: ownerEmail,
+              duration: finalDurationMs,
+              url: videoUrl,
+            },
+            { owner: ownerEmail },
+          );
+        } catch (err) {
+          console.warn("[finalize] clip.created emit failed:", err);
+        }
+
+        debugLog("[finalize] direct upload done", { id, videoUrl });
+        return { id, status: "ready" as const, videoUrl, videoSizeBytes, durationMs: finalDurationMs };
+      }
 
       // The recorder stashes compression metadata at
       // `recording-compression-{id}` when its browser-side ffmpeg.wasm

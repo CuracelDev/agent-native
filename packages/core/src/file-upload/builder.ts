@@ -153,6 +153,96 @@ async function uploadSmallFile(url: URL, init: RequestInit): Promise<Response> {
   );
 }
 
+export interface BuilderResumableSession {
+  resumableSessionUri: string;
+  assetId: string;
+}
+
+/**
+ * Server-side: initiate a GCS resumable upload session via Builder.io.
+ * The browser can then PUT chunks directly to `resumableSessionUri` using
+ * `Content-Range` headers — no app-server hop per chunk.
+ *
+ * The session URI carries its own GCS auth; no Authorization header is needed
+ * when the browser PUTs chunks to it.
+ *
+ * GCS resumable upload rules:
+ *   - Non-final chunks: PUT with `Content-Range: bytes start-end/*`
+ *     (size multiple of 256 KB recommended, minimum 256 KB)
+ *   - Final chunk: PUT with `Content-Range: bytes start-end/totalSize`
+ *   - GCS returns 308 Resume Incomplete for non-final, 200/201 for final
+ */
+export async function requestBuilderResumableSession(
+  filename: string,
+  mimeType: string,
+  size: number,
+): Promise<BuilderResumableSession> {
+  const { resolveBuilderPrivateKey } = await import(
+    "../server/credential-provider.js"
+  );
+  const privateKey = await resolveBuilderPrivateKey();
+  if (!privateKey) throw new Error("BUILDER_PRIVATE_KEY is not set");
+
+  const host = builderUploadHost();
+  const url = new URL("/api/v1/upload/signed-url", host);
+  url.searchParams.set("isResumable", "true");
+
+  console.log(`[builder-upload] resumable session: ${filename} ${mimeType} ${size} bytes`);
+  const res = await fetchWithTimeout(url.toString(), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${privateKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ fileName: filename, contentType: mimeType, size }),
+  });
+  await assertOk(res, "Builder.io resumable session request failed");
+
+  const json = (await res.json()) as { uploadUrl?: string; assetId?: string };
+  if (!json.uploadUrl || !json.assetId) {
+    throw new Error(
+      `Builder.io resumable session response missing fields: ${JSON.stringify(Object.keys(json))}`,
+    );
+  }
+  console.log(`[builder-upload] resumable session ok: assetId=${json.assetId}`);
+  return { resumableSessionUri: json.uploadUrl, assetId: json.assetId };
+}
+
+/**
+ * Server-side: register a completed GCS resumable upload with Builder.io and
+ * return the CDN URL. Call this after all browser chunks are PUT to GCS.
+ */
+export async function completeBuilderResumableUpload(
+  assetId: string,
+  filename: string,
+): Promise<string> {
+  const { resolveBuilderPrivateKey } = await import(
+    "../server/credential-provider.js"
+  );
+  const privateKey = await resolveBuilderPrivateKey();
+  if (!privateKey) throw new Error("BUILDER_PRIVATE_KEY is not set");
+
+  const host = builderUploadHost();
+  console.log(`[builder-upload] completing resumable upload: assetId=${assetId}`);
+  const res = await fetchWithTimeout(
+    new URL("/api/v1/upload/complete", host).toString(),
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${privateKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ assetId, name: filename }),
+    },
+  );
+  await assertOk(res, "Builder.io resumable upload complete failed");
+
+  const { url } = (await res.json()) as { url?: string };
+  if (!url) throw new Error("Builder.io upload/complete returned no URL");
+  console.log(`[builder-upload] resumable upload complete: ${url}`);
+  return url;
+}
+
 /**
  * Built-in Builder.io file upload provider.
  * Uses the same BUILDER_PRIVATE_KEY as the browser/background-agent flows,

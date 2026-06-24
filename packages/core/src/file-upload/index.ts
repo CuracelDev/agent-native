@@ -10,7 +10,12 @@ export {
   getActiveFileUploadProvider,
   uploadFile,
 } from "./registry.js";
-export { builderFileUploadProvider } from "./builder.js";
+export {
+  builderFileUploadProvider,
+  requestBuilderResumableSession,
+  completeBuilderResumableUpload,
+  type BuilderResumableSession,
+} from "./builder.js";
 export {
   preUploadImageAttachments,
   preUploadAttachments,

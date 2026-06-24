@@ -81,6 +81,13 @@ export interface RecorderEngineOptions {
   uploadUrl?: string;
   /** Abort URL. Default `/api/uploads/:id/abort`. */
   abortUrl?: string;
+  /**
+   * When true, the engine uploads the assembled blob directly to GCS via a
+   * resumable session (no per-chunk app-server hop). Requires the
+   * /api/uploads/:id/init-resumable and /api/uploads/:id/complete routes.
+   * Falls back to the chunk path on any init error.
+   */
+  useResumableUpload?: boolean;
   /** Fired whenever the state machine transitions. */
   onState?: (state: RecorderState, detail?: Record<string, unknown>) => void;
   /** Fired on each uploaded chunk (for progress UI). */
@@ -748,10 +755,12 @@ export class RecorderEngine {
     recordingId: string;
     uploadUrl: string;
     abortUrl: string;
+    useResumableUpload?: boolean;
   }): void {
     this.opts.recordingId = target.recordingId;
     this.opts.uploadUrl = target.uploadUrl;
     this.opts.abortUrl = target.abortUrl;
+    this.opts.useResumableUpload = target.useResumableUpload ?? false;
   }
 
   // -------------------------------------------------------------------------
@@ -1013,11 +1022,23 @@ export class RecorderEngine {
     try {
       if (
         COMPRESSION_ENABLED &&
-        this.totalRecordedBytes > COMPRESS_THRESHOLD_BYTES
+        this.totalRecordedBytes > COMPRESS_THRESHOLD_BYTES &&
+        !this.opts.useResumableUpload
       ) {
         // Compress before the first server upload so large recordings don't
         // stage their uncompressed source in SQL.
+        // Compression is skipped on the resumable path — GCS can accept files
+        // of any size and there is no per-chunk app-server payload limit.
         result = await this.compressAndReupload(finalizeMeta);
+      } else if (this.opts.useResumableUpload && !this.streamChunksDuringRecording) {
+        this.transition("uploading", { progress: 0 });
+        const assembled = new Blob(this.localChunks, { type: this.mimeType });
+        result = await this.uploadBlobResumable(
+          assembled,
+          this.mimeType,
+          finalizeMeta,
+          this.uploadAbort?.signal,
+        );
       } else if (!this.streamChunksDuringRecording) {
         this.transition("uploading", { progress: 0 });
         const assembled = new Blob(this.localChunks, { type: this.mimeType });
@@ -1498,6 +1519,159 @@ export class RecorderEngine {
     } catch {
       // ignore — the stop path will surface the original upload error.
     }
+  }
+
+  /**
+   * Upload the assembled recording blob directly to GCS via a resumable
+   * session URI, bypassing the app server chunk route.
+   *
+   * Flow:
+   *   1. POST /api/uploads/:id/init-resumable → get resumableSessionUri + assetId
+   *   2. PUT chunks directly to GCS with Content-Range headers
+   *   3. POST /api/uploads/:id/complete → Builder registers asset, DB updated
+   */
+  private async uploadBlobResumable(
+    blob: Blob,
+    mimeType: string,
+    meta: {
+      durationMs: number;
+      dimensions: { width: number; height: number };
+      hasAudio: boolean;
+      hasCamera: boolean;
+    },
+    signal?: AbortSignal,
+  ): Promise<Record<string, unknown> | undefined> {
+    const { recordingId } = this.opts;
+    const baseMime = mimeType.split(";")[0].trim() || "video/webm";
+    const ext = baseMime.includes("mp4") || baseMime.includes("quicktime") ? "mp4" : "webm";
+    const filename = `${recordingId}.${ext}`;
+
+    // Step 1 — init resumable session on the server.
+    const initRes = await fetch(
+      `${appBasePath()}/api/uploads/${recordingId}/init-resumable`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ size: blob.size, mimeType: baseMime, filename }),
+        signal,
+      },
+    );
+
+    if (!initRes.ok) {
+      const text = await initRes.text().catch(() => "");
+      throw new Error(
+        `Resumable session init failed (${initRes.status}): ${text || initRes.statusText}`,
+      );
+    }
+
+    const { resumableSessionUri, assetId } = (await initRes.json()) as {
+      resumableSessionUri?: string;
+      assetId?: string;
+    };
+
+    if (!resumableSessionUri || !assetId) {
+      throw new Error("init-resumable returned incomplete session data");
+    }
+
+    // Step 2 — PUT chunks directly to GCS.
+    // GCS requires non-final chunk sizes to be a multiple of 256 KB.
+    const GCS_CHUNK_SIZE = 8 * 256 * 1024; // 8 × 256 KB = 2 MB
+    const totalChunks = Math.max(1, Math.ceil(blob.size / GCS_CHUNK_SIZE));
+
+    for (let i = 0; i < totalChunks; i++) {
+      if (signal?.aborted) {
+        throw signal.reason instanceof Error
+          ? signal.reason
+          : new Error("Upload aborted");
+      }
+
+      const start = i * GCS_CHUNK_SIZE;
+      const end = Math.min(start + GCS_CHUNK_SIZE, blob.size);
+      const chunk = blob.slice(start, end, baseMime);
+      const isFinal = end >= blob.size;
+
+      // GCS Content-Range: bytes start-end/total  (final) or  bytes start-end/* (non-final)
+      const rangeHeader = isFinal
+        ? `bytes ${start}-${end - 1}/${blob.size}`
+        : `bytes ${start}-${end - 1}/*`;
+
+      let chunkRes: Response | null = null;
+      for (let attempt = 1; attempt <= CHUNK_UPLOAD_MAX_ATTEMPTS; attempt++) {
+        try {
+          chunkRes = await fetch(resumableSessionUri, {
+            method: "PUT",
+            headers: {
+              "Content-Range": rangeHeader,
+              "Content-Type": baseMime,
+            },
+            body: chunk,
+            signal,
+          });
+        } catch (err) {
+          if (
+            attempt >= CHUNK_UPLOAD_MAX_ATTEMPTS ||
+            (err as { name?: string } | null)?.name === "AbortError"
+          ) {
+            throw err;
+          }
+          await waitForRetry(retryDelayMs(attempt), signal);
+          continue;
+        }
+
+        // GCS returns 308 for intermediate chunks, 200/201 for the final one.
+        const ok = isFinal ? chunkRes.ok : chunkRes.status === 308 || chunkRes.ok;
+        if (!ok) {
+          if (
+            !isFinal &&
+            attempt < CHUNK_UPLOAD_MAX_ATTEMPTS &&
+            isRetryableChunkUploadStatus(chunkRes.status)
+          ) {
+            await chunkRes.text().catch(() => "");
+            await waitForRetry(retryDelayMs(attempt), signal);
+            continue;
+          }
+          const text = await chunkRes.text().catch(() => "");
+          throw new Error(
+            `GCS chunk ${i} upload failed (${chunkRes.status}): ${text || chunkRes.statusText}`,
+          );
+        }
+        break;
+      }
+
+      this.opts.onChunk?.({ index: i, bytes: chunk.size, total: totalChunks });
+    }
+
+    // Step 3 — notify the server that GCS upload is complete.
+    const completeRes = await fetch(
+      `${appBasePath()}/api/uploads/${recordingId}/complete`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          assetId,
+          filename,
+          mimeType: baseMime,
+          videoSizeBytes: blob.size,
+          durationMs: meta.durationMs,
+          width: meta.dimensions.width,
+          height: meta.dimensions.height,
+          hasAudio: meta.hasAudio,
+          hasCamera: meta.hasCamera,
+        }),
+        signal,
+      },
+    );
+
+    if (!completeRes.ok) {
+      const text = await completeRes.text().catch(() => "");
+      throw new Error(
+        `Resumable upload complete failed (${completeRes.status}): ${text || completeRes.statusText}`,
+      );
+    }
+
+    return (await completeRes.json().catch(() => undefined)) as
+      | Record<string, unknown>
+      | undefined;
   }
 
   private async uploadBlobInSlices(

@@ -549,6 +549,7 @@ interface PendingRecording {
   id: string;
   uploadChunkUrl: string;
   abortUrl: string;
+  supportsResumableUpload?: boolean;
 }
 
 function PreRecordPanelSkeleton() {
@@ -1142,10 +1143,12 @@ export default function RecordRoute() {
             id: string;
             uploadChunkUrl: string;
             abortUrl: string;
+            supportsResumableUpload?: boolean;
           };
           id?: string;
           uploadChunkUrl?: string;
           abortUrl?: string;
+          supportsResumableUpload?: boolean;
         };
         const info = created.result ?? (created as PendingRecording);
         if (!info?.id) {
@@ -1173,6 +1176,7 @@ export default function RecordRoute() {
           recordingId: info.id,
           uploadUrl: uploadChunkUrl,
           abortUrl,
+          useResumableUpload: info.supportsResumableUpload ?? false,
         });
 
         setPreviewStream(ps);
