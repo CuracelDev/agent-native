@@ -49,7 +49,9 @@ import {
 } from "./safety.ts";
 
 function isTestModelOrAllowed(flags: RunFlags): boolean {
-  return isTestModelName(flags.model) || flags.allowModels.includes(flags.model);
+  return (
+    isTestModelName(flags.model) || flags.allowModels.includes(flags.model)
+  );
 }
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -75,7 +77,9 @@ interface Assertion {
   detail: string;
 }
 
-function bodyRecord(exchange: CapturedExchange): Record<string, unknown> | null {
+function bodyRecord(
+  exchange: CapturedExchange,
+): Record<string, unknown> | null {
   const body = exchange.response.body;
   if (body && typeof body === "object" && !Array.isArray(body)) {
     return body as Record<string, unknown>;
@@ -194,7 +198,9 @@ async function runLive(
   // Creating as a draft means even the throwaway entry is never pushed live;
   // the autosave probe still exercises the staging path against it.
   const name = makeThrowawayName();
-  log(`\n[create] creating DRAFT throwaway entry "${name}" in model "${model}"`);
+  log(
+    `\n[create] creating DRAFT throwaway entry "${name}" in model "${model}"`,
+  );
   const created = await client.createEntry({
     label: "create-draft-throwaway",
     target: mutableModel,
@@ -249,7 +255,9 @@ async function runLive(
 
   // --- Q1/Q2: autoSaveOnly=true PATCH against the entry --------------------
   const autosaveTarget = registry.assertMutable(entryId, "autoSaveOnly PATCH");
-  log(`[autosave] PATCH ...?autoSaveOnly=true&triggerWebhooks=false on ${entryId}`);
+  log(
+    `[autosave] PATCH ...?autoSaveOnly=true&triggerWebhooks=false on ${entryId}`,
+  );
   const autosavePatch = await client.patchEntry({
     label: "q1-autosave-patch",
     target: autosaveTarget,
@@ -276,7 +284,9 @@ async function runLive(
   const afterEntry = deliveredEntry(afterPublishedView);
   const afterPublished = afterEntry?.published;
   const afterMarker = markerOf(afterEntry);
-  const afterHasAutosaves = metaHasAutosaves(deliveredEntry(afterIncludeUnpublished));
+  const afterHasAutosaves = metaHasAutosaves(
+    deliveredEntry(afterIncludeUnpublished),
+  );
 
   // Q1: the autosave write must succeed AND the delivered (published-state)
   // artifact must NOT move: published state unchanged, delivered marker
@@ -284,7 +294,11 @@ async function runLive(
   findings.push(
     findingFromAssertions(
       "Q1: Does autoSaveOnly=true leave the live/published artifact unchanged?",
-      ["q1-baseline-delivery", "q1-autosave-patch", "q1-delivery-after-autosave"],
+      [
+        "q1-baseline-delivery",
+        "q1-autosave-patch",
+        "q1-delivery-after-autosave",
+      ],
       [
         {
           label: "autosave PATCH HTTP ok",
@@ -306,27 +320,44 @@ async function runLive(
     ),
   );
 
-  // Q2: autosave must flip meta.hasAutosaves to true.
-  findings.push(
-    findingFromAssertions(
-      "Q2: Does autosave create a History autosave (meta.hasAutosaves flips true)?",
-      ["q1-autosave-patch", "q2-include-unpublished-after-autosave"],
-      [
-        {
-          label: "meta.hasAutosaves === true after autosave",
-          ok: afterHasAutosaves === true,
-          detail: `hasAutosaves=${String(afterHasAutosaves)}`,
-        },
-      ],
-      "The autosave PATCH produced a staged autosave revision.",
-    ),
-  );
+  // Q2: whether the write-API autosave stages a *recoverable* History revision
+  // is NOT observable through Builder's read APIs. `meta.hasAutosaves` is a real
+  // delivery field (production blog-article entries return it `true` for
+  // autosaves made in the Builder *editor*), but the write-API
+  // `?autoSaveOnly=true` PATCH does not observably flip it. Verified empirically
+  // (2026-06-24 live run) across: draft AND published entries, minimal AND
+  // content-bearing (`data.blocks`) entries, 1s/8s/20s re-read windows, and with
+  // and without `cachebust` — `meta` comes back empty `{}` or absent every time.
+  // Also unavailable via `fields=meta`/`includeMeta`, the write-side GET (returns
+  // "Bad request method"), and the admin GraphQL endpoint. The editor-autosave
+  // state is editor-internal; the write-API path apparently registers it
+  // differently. This question therefore cannot be answered from the API surface,
+  // so it is recorded as `blocked` (non-fatal) rather than asserted against a
+  // value the write path does not produce. It does NOT gate enabling writes: the
+  // gating invariant is Q1 (the delivered published artifact never moved), above.
+  findings.push({
+    question:
+      "Q2: Does the write-API autosave create an observable History autosave (staged-autosave flag)?",
+    status: "blocked",
+    evidenceLabels: [
+      "q1-autosave-patch",
+      "q2-include-unpublished-after-autosave",
+    ],
+    note:
+      "Not observable via Builder's read APIs: the write-API autoSaveOnly PATCH " +
+      `does not flip meta.hasAutosaves (observed ${String(afterHasAutosaves)}) on ` +
+      "draft or published entries. The field is real (editor-made autosaves show " +
+      "it true in production) but this write path does not surface it; confirm " +
+      "recoverability in the Builder editor if required. Does not gate live " +
+      "writes — Q1 (live artifact unchanged) is the safety contract, and it passed.",
+  });
 
   // --- Q4: identify live vs autosaved revision fields ----------------------
   // This is descriptive (field-shape), not an invariant — record it as answered
   // with the concrete observed distinguishing fields.
   findings.push({
-    question: "Q4: Which response fields distinguish live vs autosaved revision?",
+    question:
+      "Q4: Which response fields distinguish live vs autosaved revision?",
     status: "answered",
     evidenceLabels: [
       "q1-autosave-patch",
@@ -334,10 +365,14 @@ async function runLive(
       "q2-include-unpublished-after-autosave",
     ],
     note:
-      "Observed distinguishing fields: published=" +
-      `${String(afterPublished)}, meta.hasAutosaves=${String(afterHasAutosaves)}. ` +
-      "The delivered (published-state) revision and the staged autosave are " +
-      "independent: published/marker stayed put while hasAutosaves flipped.",
+      "Observed distinguishing field: published=" +
+      `${String(afterPublished)} (unchanged from baseline=${String(baselinePublished)}), ` +
+      `delivered marker unchanged (${JSON.stringify(afterMarker)}). ` +
+      "The staged-autosave flag (meta.hasAutosaves) is NOT delivered via the API " +
+      `(observed ${String(afterHasAutosaves)}), so the live vs. autosaved revision ` +
+      "is distinguished only by the published state/content staying put while the " +
+      "autosave PATCH returns 200 — any autosaved revision Builder may stage is " +
+      "editor-internal, not delivered.",
   });
 
   // --- Q5: duplicate-handle / listing semantics ---------------------------
@@ -402,7 +437,8 @@ async function runLive(
           {
             label: "published-only delivery no longer returns the entry",
             ok: publishedResultCount === 0,
-            detail: `published-only results=${String(publishedResultCount)} ` +
+            detail:
+              `published-only results=${String(publishedResultCount)} ` +
               `(status ${afterUnpublishPublished.response.status})`,
           },
         ],
@@ -413,7 +449,7 @@ async function runLive(
   } else {
     findings.push({
       question:
-        "Q3: What does published:\"draft\" (no autoSaveOnly) do to a live entry?",
+        'Q3: What does published:"draft" (no autoSaveOnly) do to a live entry?',
       status: "blocked",
       evidenceLabels: [],
       note:
@@ -435,20 +471,38 @@ async function runLive(
 function printPlan(flags: RunFlags, client: BuilderContractClient): void {
   log("Builder autoSaveOnly contract harness — PLAN (no --live, no network)\n");
   log(`  model:                 ${flags.model}`);
-  log(`  model allowed (live):  ${isTestModelOrAllowed(flags) ? "yes" : "NO — would abort"}`);
-  log(`  extra --allow-model:   ${flags.allowModels.length ? flags.allowModels.join(", ") : "(none)"}`);
-  log(`  write credentials:     ${client.hasWriteCredentials() ? "present" : "MISSING"}`);
-  log(`  delivery credentials:  ${client.hasReadCredentials() ? "present" : "MISSING (required for --live)"}`);
-  log(`  unpublish probe (Q3):  ${flags.allowUnpublishTest ? "enabled" : "disabled"}`);
+  log(
+    `  model allowed (live):  ${isTestModelOrAllowed(flags) ? "yes" : "NO — would abort"}`,
+  );
+  log(
+    `  extra --allow-model:   ${flags.allowModels.length ? flags.allowModels.join(", ") : "(none)"}`,
+  );
+  log(
+    `  write credentials:     ${client.hasWriteCredentials() ? "present" : "MISSING"}`,
+  );
+  log(
+    `  delivery credentials:  ${client.hasReadCredentials() ? "present" : "MISSING (required for --live)"}`,
+  );
+  log(
+    `  unpublish probe (Q3):  ${flags.allowUnpublishTest ? "enabled" : "disabled"}`,
+  );
   log("\nSteps that WOULD run with --live:");
-  log("  0. POST create throwaway entry as DRAFT (zz-autosave-contract-test-*)");
+  log(
+    "  0. POST create throwaway entry as DRAFT (zz-autosave-contract-test-*)",
+  );
   log("  1. GET baseline delivery (includeUnpublished)");
   log("  2. PATCH ?autoSaveOnly=true&triggerWebhooks=false  (Q1/Q2/Q4)");
-  log("  3. GET delivery + includeUnpublished after autosave; ASSERT invariants");
+  log(
+    "  3. GET delivery + includeUnpublished after autosave; ASSERT invariants",
+  );
   log("  4. GET query by handle (Q5 duplicate/listing)");
   log("  5. [gated] PATCH published:draft + re-read (Q3 unpublish risk)");
-  log("\nAdd --live to execute. Requires write AND delivery credentials in env.");
-  log("Live writes refuse any model that is not test-named or --allow-model'd.");
+  log(
+    "\nAdd --live to execute. Requires write AND delivery credentials in env.",
+  );
+  log(
+    "Live writes refuse any model that is not test-named or --allow-model'd.",
+  );
 }
 
 function writeEvidence(
@@ -516,9 +570,7 @@ async function main(): Promise<void> {
   try {
     ({ findings } = await runLive(client, flags));
   } catch (error) {
-    log(
-      `\n[abort] ${error instanceof Error ? error.message : String(error)}`,
-    );
+    log(`\n[abort] ${error instanceof Error ? error.message : String(error)}`);
     findings = [
       {
         question: "ALL",
@@ -555,6 +607,8 @@ async function main(): Promise<void> {
 }
 
 main().catch((error) => {
-  process.stderr.write(`${error instanceof Error ? error.stack : String(error)}\n`);
+  process.stderr.write(
+    `${error instanceof Error ? error.stack : String(error)}\n`,
+  );
   process.exitCode = 1;
 });
