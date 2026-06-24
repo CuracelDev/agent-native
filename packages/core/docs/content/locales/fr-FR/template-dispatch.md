@@ -1,0 +1,220 @@
+---
+title: "Expédition"
+description: "Dispatch est le plan de contrôle de l'espace de travail : boîte de réception centrale, orchestration inter-applications, coffre-fort de secrets, intégration Slack/Telegram et tâches planifiées."
+---
+
+# Expédition
+
+> **Voir aussi :** pour un aperçu conceptuel de ce que fait Dispatch et quand vous le souhaitez, voir [Dispatch](/docs/dispatch). Cette page est la référence spécifique au modèle.
+
+Dispatch est le **plan de contrôle de l'espace de travail**. Là où d'autres modèles sont des applications de domaine (Mail, Calendar, Analytics, Brain), Dispatch est l'application que vous exécutez _à côté_ d'eux pour tout coordonner : une boîte de réception centrale, un coffre-fort secret, des tâches planifiées, une intégration Slack/Telegram et un agent orchestrateur qui délègue le travail de domaine à la bonne application spécialisée via [A2A](/docs/a2a-protocol).
+
+```an-wireframe
+{
+  "surface": "desktop",
+  "html": "<div style='display:flex;flex-direction:column;gap:14px;padding:18px;min-height:520px;box-sizing:border-box'><div style='display:flex;align-items:center;gap:10px'><h1 style='margin:0'>Dispatch</h1><span class='wf-pill accent'>Overview</span><span class='wf-pill'>Inbox</span><span class='wf-pill'>Secrets</span><span class='wf-pill'>Approvals</span><div style='flex:1'></div><button>Schedules</button></div><div class='wf-card' style='display:flex;flex-direction:column;gap:10px'><strong>What should we do next?</strong><div class='wf-box'>Ask Analytics for this week's signups and draft a Slack update.</div><button class='primary'>Delegate</button></div><div style='display:grid;grid-template-columns:repeat(3,1fr);gap:10px'><div class='wf-card'><strong>Mail</strong><br/><small>/mail</small></div><div class='wf-card'><strong>Calendar</strong><br/><small>/calendar</small></div><div class='wf-card'><strong>Analytics</strong><br/><small>/analytics</small></div><div class='wf-card'><strong>Slides</strong><br/><small>/slides</small></div><div class='wf-card'><strong>Forms</strong><br/><small>/forms</small></div><div class='wf-card'><strong>Create app</strong><br/><small>+</small></div></div><div class='wf-card' style='display:grid;grid-template-columns:repeat(3,1fr);gap:8px'><div class='wf-box'>Slack DM needs reply</div><div class='wf-box'>A2A task completed</div><div class='wf-box'>Approval required</div></div></div>"
+}
+```
+
+Si vous utilisez un [multi-app workspace](/docs/multi-app-workspace) avec de nombreuses applications, Dispatch est le ciment.
+
+```an-diagram title="Orchestrate, don't specialize" summary="Messages from every channel land in one inbox; the orchestrator triages and delegates domain work to the right specialist app over A2A — secrets, resources, and approvals stay central."
+{
+  "html": "<div class=\"diagram-dispatch\"><div class=\"diagram-col\"><div class=\"diagram-node\">Slack · Telegram</div><div class=\"diagram-node\">Email</div><div class=\"diagram-node\">A2A requests</div></div><div class=\"diagram-arrow diagram-muted\" aria-hidden=\"true\">&rarr;</div><div class=\"diagram-box\" data-rough><span class=\"diagram-pill accent\">Orchestrator</span><small class=\"diagram-muted\">central inbox · triage · route</small></div><div class=\"diagram-arrow diagram-muted\" aria-hidden=\"true\">&rarr;</div><div class=\"diagram-col\"><div class=\"diagram-node\">Mail agent</div><div class=\"diagram-node\">Analytics agent</div><div class=\"diagram-node\">Brain · Slides &hellip;</div></div></div><div class=\"diagram-shared\"><span class=\"diagram-pill\">Secrets vault</span><span class=\"diagram-pill\">Workspace resources</span><span class=\"diagram-pill warn\">Approvals</span><span class=\"diagram-pill\">Scheduled jobs</span></div>",
+  "css": ".diagram-dispatch{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.diagram-dispatch .diagram-col{display:flex;flex-direction:column;gap:8px}.diagram-dispatch .diagram-box{display:flex;flex-direction:column;gap:4px}.diagram-dispatch .diagram-arrow{font-size:20px;line-height:1}.diagram-shared{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}"
+}
+```
+
+## Ce qu'il fait {#what-it-does}
+
+- **Boîte de réception centrale.** DM Slack, messages Telegram, notifications par e-mail, demandes A2A d'autres agents : tout arrive au même endroit. L'agent de répartition les trie et les gère lui-même ou les délègue. Consultez [Messaging](/docs/messaging) pour savoir comment connecter Slack, la messagerie électronique et Telegram à votre espace de travail.
+- **Orchestreur, pas spécialiste.** Dispatch n'essaie _pas_ d'être l'application de messagerie ou l'application d'analyse. Lorsque quelqu'un demande « résumer les inscriptions de la semaine dernière », Dispatch appelle l'agent d'analyse via A2A et renvoie la réponse. Lorsque quelqu'un demande « rédigez une réponse à Alice », Dispatch appelle l'agent de messagerie.
+- **Shell de plan de contrôle.** Les discussions, les projets, les exécutions, les applications d'espace de travail, les agents et les automatisations résident dans un seul shell opérationnel, avec des listes et des explorations axées sur l'état en premier au lieu de tableaux de bord uniques.
+- **Coffre-fort de secrets.** Un magasin central pour les clés API, les jetons OAuth et les informations d'identification partagées. Les applications de l'espace de travail résolvent les secrets de Dispatch au lieu de les dupliquer dans chaque `.env`. Demandes + approbations pour les accès sensibles.
+- **Ressources de l'espace de travail.** Les serveurs skills globaux, les instructions de garde-corps, les profils d'agent personnalisés, les ressources de référence et les serveurs HTTP MCP peuvent être créés une fois dans Dispatch. Les ressources de toutes les applications sont héritées au moment de l'exécution par chaque application sans étape de copie ni de synchronisation manuelle ; Les subventions sélectionnées concernent des exceptions spécifiques à une application.
+- **Intégrations réutilisables.** Un seul endroit pour connecter les comptes des fournisseurs et suivre
+  références d'informations d'identification et accorder l'accès aux applications. Dispatch possède l'identité du fournisseur et
+  subventions d'application ; les applications de domaine possèdent toujours des choix de sources spécifiques à l'application, tels que Brain's
+  Liste verte des canaux Slack ou configuration des métriques/tableau de bord d'Analytics.
+- **Hub des tâches planifiées.** [recurring jobs](/docs/recurring-jobs) inter-applications en direct ici : "tous les jours de la semaine à 7 heures, extrayez les indicateurs clés de la veille à partir des analyses et rédigez un e-mail de synthèse du matin."
+- **Dreams.** Dispatch peut examiner les exécutions récentes des agents, les échecs, les commentaires et les modèles réussis pour proposer des améliorations en matière de mémoire, de compétences, de tâches et d'instructions avant que quelque chose de durable ne soit appliqué.
+- **Flux d'approbation.** Un actions destructeur ou externe (envoi d'argent, envoi d'un e-mail sortant, publication sur Slack à grande échelle) peut nécessiter l'accord d'un administrateur avant de se déclencher. Dispatch est propriétaire de la file d'attente.
+
+## Quand l'utiliser {#when-to-use}
+
+Utiliser Dispatch lorsque :
+
+- Vous disposez de **deux** applications natives d'agent ou plus dans un espace de travail et souhaitez les coordonner dans un seul endroit.
+- Vous avez besoin de **secrets centralisés** avec des subventions par application et une piste d'audit.
+- Vous voulez un **hub de messagerie** qui achemine Slack ou Telegram vers le bon agent de domaine.
+- Vous souhaitez des **tâches planifiées** qui extraient des données de plusieurs applications.
+
+Ignorez-le pour un échafaudage à application unique : utilisez directement [Chat template](/docs/template-chat) ou l'un des modèles de domaine.
+
+Démo en direct : [dispatch.agent-native.com](https://dispatch.agent-native.com).
+
+## Qu'est-ce que vous en ferez {#what-youll-do}
+
+Au quotidien, Dispatch est l'endroit où les administrateurs et les opérationnels s'ouvrent pour assurer le fonctionnement de l'espace de travail :
+
+- **Connectez Slack, la messagerie électronique et Telegram** pour que les gens puissent envoyer des messages à votre agent où qu'ils travaillent déjà. Voir [Messaging](/docs/messaging) pour les étapes de câblage.
+- **Enregistrez les secrets partagés une fois.** Les clés API, les jetons OAuth et les informations d'identification de service se trouvent dans le coffre-fort et les autres applications de votre espace de travail les extraient au lieu que chaque membre de l'équipe jongle avec son propre `.env`.
+- **Connectez les fournisseurs une fois.** Les intégrations réutilisables stockent les métadonnées de compte en toute sécurité
+  et les références d'informations d'identification, puis accordez des applications telles que Brain, Analytics, Mail ou
+  Distribuez l'accès sans copier les secrets bruts. Source spécifique à l'application
+  la configuration reste dans l'application qui utilise le fournisseur.
+- **Exposer un connecteur MCP.** Ajouter
+  `https://dispatch.agent-native.com/_agent-native/mcp` dans Claude, ChatGPT,
+  Codex, Cursor ou un autre hôte MCP, puis choisissez les applications d'espace de travail qui
+   peut être atteint depuis la page **Agents** de Dispatch. Utiliser une application directe URL
+  uniquement lorsque cet hôte doit être isolé sur une seule application.
+- **Gérer les automatisations.** La vue Automatisations affiche l'état activé, la dernière exécution,
+  prochaine exécution et dernière erreur des planifications `jobs/*.md` sous-jacentes, et permettons
+  vous activez ou désactivez une tâche sans modifier les fichiers à la main.
+- **Gardez le contexte de l'entreprise à l'échelle mondiale.** Placez une fois les personnages, le positionnement, les messages, les informations sur l'entreprise, les directives de marque et les garde-fous dans les ressources de répartition, puis prévisualisez l'espace de travail efficace -> application/organisation -> pile personnelle pour n'importe quelle application/utilisateur ou inspectez la pile à partir de la vue contextuelle d'une carte d'application.
+- **Configurer des tâches récurrentes.** "Tous les lundis à 7 heures du matin, demandez à l'agent d'analyse les inscriptions de la semaine dernière et envoyez-moi un résumé par e-mail." Voir [Recurring Jobs](/docs/recurring-jobs).
+- **Examinez les propositions de rêve.** Dispatch Dreams inspecte les exécutions précédentes de l'agent et crée des propositions basées sur la source pour ce que l'espace de travail doit retenir, quelles notes obsolètes doivent être nettoyées et quelles leçons répétées doivent devenir des skills ou des tâches.
+- **Approuvez les actions sortants avant qu'ils ne se déclenchent.** L'envoi d'argent, l'envoi massif d'e-mails à des clients ou la publication sur un canal public Slack peuvent être contrôlés par un administrateur OK.
+- **Découvrez qui a accès à quoi.** Octroi par application, file d'attente des requêtes et journal d'audit indiquant qui a utilisé quel secret et à quel moment.
+- **Acheminer les messages vers le bon spécialiste.** Un DM Slack concernant l'analyse est envoyé à l'agent d'analyse ; celui concernant le courrier électronique est envoyé à l'agent de messagerie – Sélections de répartition.
+
+## L'architecture en un coup d'œil {#architecture}
+
+_Comment ça marche sous le capot (pour les développeurs)._
+
+- **Agent Orchestrator.** Le chat est configuré comme un routeur : il lit `AGENTS.md`, `LEARNINGS.md` et les achemine vers des sous-agents spécialisés ou des agents A2A distants.
+- **Registre d'agent distant.** Les manifestes d'agent A2A sont des entrées d'exécution de l'espace de travail (et non un dossier source de modèle archivé) : dans un espace de travail multi-applications, les applications sœurs sous `apps/` sont automatiquement découvertes en tant que homologues A2A — aucune inscription manuelle n'est nécessaire. Dispatch les appelle à l'aide de l'action `call-agent`.
+- **Schéma Vault.** Tableaux Drizzle pour les secrets, les autorisations, les demandes, les approbations et les journaux d'audit. Ceux-ci se trouvent dans le package `@agent-native/dispatch` (`packages/dispatch/src/db/schema.ts`) et sont réexportés dans le modèle via `templates/dispatch/server/db/index.ts` — il n'y a pas de `server/db/schema.ts` local au modèle. Le runtime de Dispatch est livré dans le package, pas dans la source du modèle (conformément à la note ci-dessous selon laquelle `@agent-native/dispatch` possède le shell, la barre latérale et les pages intégrées).
+- **Plugins Slack / Telegram.** Plugins serveur qui enregistrent webhooks et transmettent les messages entrants à l'agent orchestrateur.
+- **Ressources Workspace MCP.** Ajoutez des définitions de serveur HTTP MCP sous `mcp-servers/*.json` dans Ressources, puis étendez-les à Toutes les applications ou aux subventions d'applications sélectionnées, tout comme skills et le contexte.
+
+```an-schema title="Secrets vault schema" summary="Secrets are stored once; grants give a named app access; requests + reviews gate sensitive access; the audit log records who used which secret when. Defined in @agent-native/dispatch (packages/dispatch/src/db/schema.ts)."
+{
+  "entities": [
+    { "id": "secrets", "name": "vault_secrets", "note": "Stored credential values", "fields": [
+      { "name": "id", "type": "text", "pk": true },
+      { "name": "owner_email", "type": "text" },
+      { "name": "org_id", "type": "text", "nullable": true },
+      { "name": "name", "type": "text" },
+      { "name": "credential_key", "type": "text" },
+      { "name": "value", "type": "text", "note": "secret value" },
+      { "name": "provider", "type": "text", "nullable": true }
+    ] },
+    { "id": "grants", "name": "vault_grants", "note": "Per-app access grant", "fields": [
+      { "name": "id", "type": "text", "pk": true },
+      { "name": "secret_id", "type": "text", "fk": "vault_secrets.id" },
+      { "name": "app_id", "type": "text" },
+      { "name": "granted_by", "type": "text" },
+      { "name": "status", "type": "text" }
+    ] },
+    { "id": "requests", "name": "vault_requests", "note": "Access request + review", "fields": [
+      { "name": "id", "type": "text", "pk": true },
+      { "name": "credential_key", "type": "text" },
+      { "name": "app_id", "type": "text" },
+      { "name": "reason", "type": "text", "nullable": true },
+      { "name": "status", "type": "text" },
+      { "name": "reviewed_by", "type": "text", "nullable": true }
+    ] },
+    { "id": "audit", "name": "vault_audit_log", "note": "Who used which secret when", "fields": [
+      { "name": "id", "type": "text", "pk": true },
+      { "name": "secret_id", "type": "text", "fk": "vault_secrets.id", "nullable": true },
+      { "name": "app_id", "type": "text", "nullable": true },
+      { "name": "action", "type": "text" },
+      { "name": "actor", "type": "text" }
+    ] }
+  ],
+  "relations": [
+    { "from": "secrets", "to": "grants", "kind": "1-n", "label": "granted via" },
+    { "from": "secrets", "to": "audit", "kind": "1-n", "label": "use recorded by" }
+  ]
+}
+```
+
+- **Mode hub MCP.** Dispatch peut toujours agir comme [MCP hub](/docs/mcp-clients#hub) de l'espace de travail, de sorte que toutes les autres applications de l'espace de travail extraient la même liste de serveurs MCP de portée organisationnelle. Par ailleurs, le point de terminaison `/_agent-native/mcp` de Dispatch est le connecteur externe MCP recommandé pour Claude, ChatGPT et d'autres hôtes qui doivent atteindre plusieurs applications d'espace de travail.
+
+## Rêves {#dreams}
+
+Les rêves sont la boucle de révision de Dispatch pour la mémoire des agents. Une passe de rêve examine les exécutions d'agents existantes, les données de débogage des threads, les commentaires, les évaluations et les échecs répétés des outils, puis rédige un rapport avec les modifications proposées. Les propositions peuvent cibler la mémoire personnelle, le `LEARNINGS.md` partagé, les instructions de l'espace de travail, l'espace de travail skills, les connaissances de l'espace de travail, les agents de l'espace de travail ou les tâches récurrentes, mais les modifications partagées et au niveau de l'espace de travail restent révisables plutôt que d'être appliquées silencieusement.
+
+Les propositions de rêve sont vérifiées par rapport à l'index de la mémoire personnelle, aux fichiers `memory/*.md` existants et au `LEARNINGS.md` partagé avant d'être enregistrées. Les leçons en double sont ignorées dans le rapport, tandis que les souvenirs personnels probablement obsolètes sont mis à jour au lieu de produire des notes parallèles. Dans un rapport, Dreams déduplique également les preuves répétées par fil de discussion, type de signal et citation normalisée, supprime le contexte injecté de la détection de correction par l'utilisateur et résume les lignes brutes d'évaluation/d'outil dans des puces lisibles par l'homme avant qu'elles n'apparaissent dans le texte de la proposition. Lorsqu'un laissez-passer trouve des signaux mais ne crée intentionnellement aucune proposition, le rapport inclut des notes de garde-fou expliquant quelles preuves ont été supprimées.
+
+Lorsque la stratégie d'approbation de répartition est activée, l'application d'une proposition de rêve partagée ou à l'échelle de l'équipe crée une demande d'approbation en attente au lieu d'écrire immédiatement. La création, la mise à jour ou la suppression d'une ressource d'espace de travail Toutes les applications met également en file d'attente une demande d'approbation. Les propositions de mémoire personnelle et les modifications de ressources sélectionnées uniquement peuvent toujours être appliquées directement après examen.
+
+Utilisez Dreams lorsque vous souhaitez répondre à des questions telles que "Qu'est-ce que les agents ont continué à se tromper cette semaine ?", "De quoi devons-nous nous souvenir ?" ou "Quelle leçon répétée mérite une compétence ?" Les Slack entrants, les e-mails, Telegram, WhatsApp et les preuves dérivées du Web sont traités comme des entrées non fiables, de sorte que les propositions provenant de ces sources doivent être examinées et provenues avant d'affecter la mémoire partagée. Les propositions d'instructions d'espace de travail nécessitent des preuves durables couvrant au moins deux threads ou deux applications sources ; Le bruit d'évaluation uniquement, les problèmes de configuration de compte, les limites de quota et les corrections de formulation UI pour une seule application restent en dehors des instructions globales.
+
+### Limites de validation des entrées de rêve
+
+Étant donné que les preuves sont collectées à partir de sources externes non fiables (telles que les transcriptions de chat, webhooks et les intégrations tierces), le processeur Dream applique des limites strictes de validation des entrées pour empêcher l'injection rapide et les attaques de taille de charge utile :
+
+- **Limites de taille en octets :** Les charges utiles des threads individuels sont limitées à un maximum de 10 Ko de contenu texte par message, et les analyses candidates sont tronquées si elles dépassent 100 Ko au total pour éviter l'épuisement du contexte.
+- **Nettoyage :** Toutes les entrées de texte sont nettoyées pour supprimer les caractères de contrôle, les charges utiles binaires et les plages Unicode non imprimables.
+- **Validation du schéma :** Les données de débogage entrantes et l'historique des threads sont analysés par rapport aux schémas Zod stricts avant d'être compilés dans les invites LLM. Toute structure candidate qui échoue à la validation du schéma est immédiatement éliminée du lot de traitement.
+- **Échappement :** Tous les morceaux de texte fournis par l'utilisateur sont échappés dynamiquement lorsqu'ils sont formatés dans les modèles d'invite pour empêcher les injections d'invite (par exemple, en essayant de détourner la boucle Dream pour écrire des instructions arbitraires).
+
+Dans le Dispatch UI, ouvrez **Dreams** pour exécuter une passe manuelle, examiner les discussions des candidats, inspecter le rapport et ouvrir la feuille de révision de chaque proposition avant de l'appliquer ou de la rejeter. Utilisez **Paramètres** pour modifier la planification cron récurrente, la portée de la source, les limites de délai d'expiration/de simultanéité, la limite de candidats et le seuil minimum de candidats ; utilisez **Assurer la planification** après l'enregistrement lorsque vous souhaitez que la tâche récurrente `jobs/dispatch-dream.md` soit matérialisée à partir de ces paramètres. La feuille de révision montre le comportement d'approbation, le contenu cible actuel, le contenu proposé et les preuves sources. Les agents utilisent le même workflow via actions :
+
+- `list-dream-candidates` recherche les threads récents avec des signaux fondés tels que des corrections explicites de l'utilisateur, des échecs d'exécution, des erreurs d'outils, des commentaires, des échecs d'évaluation et des flux de travail réussis avec points de contrôle. Passez `sourceId: "all"` ou `sourceIds` pour analyser plusieurs sources de débogage de threads ; `sourceTimeoutMs`, `sourceConcurrency`, `sourceStartStaggerMs`, `threadConcurrency` et `threadTimeoutMs` maintiennent les analyses de production partielles et limitées, et la réponse inclut l'intégrité par source.
+- `create-dream-report` crée le rapport et les propositions en attente. Les rapports multi-sources incluent une section Source Health afin que les analyses partielles soient visibles lors de l'examen. Des corrections répétées et des échecs récurrents peuvent devenir des propositions de ressources d'espace de travail telles que `workspace-instruction` ; des flux de travail répétés et réussis avec des points de contrôle peuvent devenir des propositions `workspace-skill`.
+- `get-dream-settings` et `set-dream-settings` lisent et mettent à jour le calendrier de rêve récurrent, la portée de la source, les contrôles de délai d'attente/de concurrence, la limite et le seuil minimum de candidats.
+- Examen des poignées `get-dream`, `preview-dream-proposal`, `apply-dream-proposal` et `reject-dream-proposal`.
+- `ensure-dream-job` crée le travail de rêve récurrent et sécurisé une fois que les rapports manuels sont utiles.
+
+L'exécuteur d'action locale du modèle Dispatch expose également le package Dispatch actions, de sorte qu'en cours de développement, vous pouvez exécuter le même flux de travail à partir de `apps/dispatch` :
+
+```bash
+pnpm action get-dream-settings
+pnpm action set-dream-settings --enabled true --schedule "0 9 * * 1" --allSources true --limit 8
+pnpm action create-dream-report --allSources true --sourceTimeoutMs 30000 --limit 8
+```
+
+## Échafaudage {#scaffolding}
+
+```bash
+npx @agent-native/core@latest create my-platform
+# pick "Dispatch" in the multi-select picker, plus whichever domain apps you want
+```
+
+Si vous préférez nommer le modèle directement au lieu d'utiliser le sélecteur :
+
+```bash
+npx @agent-native/core@latest create my-platform --template dispatch
+# add more apps in the same workspace as you go
+```
+
+Dispatch est généralement intégré dans un espace de travail aux côtés des applications qu'il coordonne. Pour un espace de travail, l'authentification, la base de données et la marque partagées de Dispatch sont héritées du cœur de l'espace de travail – voir [Multi-App Workspace](/docs/multi-app-workspace).
+
+Il n'y a pas de répartition `--standalone` significative : un plan de contrôle sans rien à coordonner n'est qu'une boîte de réception vide. Intégrez-le dans un espace de travail avec au moins une application de domaine afin qu'il dispose d'agents vers lesquels acheminer via A2A. (L'indicateur fonctionne toujours et produit une application exécutable, mais l'orchestrateur n'a aucun spécialiste à qui déléguer jusqu'à ce que vous ajoutiez des applications sœurs.)
+
+## Première exécution locale {#first-local-run}
+
+Depuis la racine de l'espace de travail :
+
+```bash
+pnpm install
+pnpm dev
+```
+
+Ouvrez le Dispatch URL imprimé par le serveur de développement. Le développement local utilise le même flux de connexion Better Auth que la production. Créez un compte local avec email + mot de passe ; la vérification des e-mails est ignorée lors du développement et le mot de passe est stocké uniquement dans la base de données de votre application locale. Il n'y a pas de contournement d'authentification pris en charge dans l'échafaudage par défaut, car l'agent, les ressources de l'espace de travail, le coffre-fort et le modèle de partage reposent tous sur une session utilisateur réelle.
+
+Vous pouvez cliquer sur Dispatch UI après vous être connecté. Pour utiliser l'outil de composition de chat ou exécuter des tâches d'agent, connectez d'abord un fournisseur LLM :
+
+1. Ouvrez **Paramètres**.
+2. Dans **LLM**, connectez Builder.io ou ajoutez votre propre clé de fournisseur telle que `ANTHROPIC_API_KEY`.
+3. Retournez à **Présentation** et essayez le composer.
+
+## Le personnaliser {#customize}
+
+Dispatch est un modèle complet comme les autres — voir [Templates](/docs/cloneable-saas). Demandez à l'agent « d'ajouter une nouvelle intégration pour Datadog » ou « d'acheminer les DM Slack du canal X vers l'agent d'analyse » et il modifiera la configuration de routage, ajoutera le gestionnaire de webhook et le connectera.
+
+Pour les écrans de gestion spécifiques à l'espace de travail, ajoutez les pages locales du routeur React et
+enregistrez-les dans `app/dispatch-extensions.tsx`. L'espace de travail généré possède
+uniquement l'onglet et l'itinéraire supplémentaires ; `@agent-native/dispatch` continue de posséder le shell,
+barre latérale, pages intégrées et futures mises à jour du package.
+
+## Quelle est la prochaine étape
+
+- [**Messaging**](/docs/messaging) : connectez Slack, la messagerie électronique et Telegram pour pouvoir parler à votre agent de n'importe où
+- [**Multi-App Workspace**](/docs/multi-app-workspace) : exécution de Dispatch avec plusieurs applications
+- [**A2A Protocol**](/docs/a2a-protocol) – comment répartir les délégations à des agents spécialisés
+- [**MCP Clients — Hub Mode**](/docs/mcp-clients#hub) : partage des serveurs MCP dans l'espace de travail
+- [**Recurring Jobs**](/docs/recurring-jobs) – exécutions de répartition des tâches planifiées
