@@ -74,14 +74,14 @@ pnpm install
 एक कार्रवाई एक ऐसा ऑपरेशन है जिसे आपका एजेंट - और आपका UI - कॉल कर सकता है। दोनों मचान
 इस उदाहरण के साथ शिप करें:
 
-```an-annotated-code title="Your first action"
+```an-annotated-code title="आपका पहला action"
 {
   "filename": "actions/hello.ts",
   "language": "ts",
-  "code": "import { defineAction } from \"@agent-native/core/action\";\nimport { z } from \"zod\";\n\nexport default defineAction({\n  description: \"Say hello from the local agent.\",\n  schema: z.object({\n    name: z.string().default(\"world\"),\n  }),\n  http: { method: \"GET\" },\n  readOnly: true,\n  run: async ({ name }) => {\n    return { message: `Hello, ${name}!` };\n  },\n});",
+  "code": "import { defineAction } from \"@agent-native/core/action\";\nimport { z } from \"zod\";\n\nexport default defineAction({\n  description: \"Local agent से hello कहें।\",\n  schema: z.object({\n    name: z.string().default(\"world\"),\n  }),\n  http: { method: \"GET\" },\n  readOnly: true,\n  run: async ({ name }) => {\n    return { message: `Hello, ${name}!` };\n  },\n});",
   "annotations": [
-    { "lines": "5", "label": "Tool description", "note": "The agent reads `description` to decide when to call this as a tool." },
-    { "lines": "6-8", "label": "Typed contract", "note": "One zod `schema` validates input from every surface — agent, UI, HTTP, MCP, and A2A." },
+    { "lines": "5", "label": "Tool description", "note": "Agent `description` पढ़कर तय करता है कि इसे tool के रूप में कब call करना है।" },
+    { "lines": "6-8", "label": "Typed contract", "note": "एक zod `schema` हर surface से input validate करता है: agent, UI, HTTP, MCP और A2A।" },
     { "lines": "9", "label": "HTTP verb", "note": "Opt this action into an auto-mounted HTTP endpoint." },
     { "lines": "10", "label": "Read-only", "note": "`readOnly` marks the action as safe to call without approval and cacheable for queries." },
     { "lines": "11-13", "label": "One implementation", "note": "The `run` body is the single source of truth that every surface executes." }

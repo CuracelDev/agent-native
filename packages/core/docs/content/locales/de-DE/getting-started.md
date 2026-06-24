@@ -74,14 +74,14 @@ Von hier an sind die beiden identisch.
 Eine Aktion ist ein Vorgang, den Ihr Agent – und Ihr UI – aufrufen kann. Beide Gerüste
 Versenden Sie mit diesem Beispiel:
 
-```an-annotated-code title="Your first action"
+```an-annotated-code title="Deine erste Action"
 {
   "filename": "actions/hello.ts",
   "language": "ts",
-  "code": "import { defineAction } from \"@agent-native/core/action\";\nimport { z } from \"zod\";\n\nexport default defineAction({\n  description: \"Say hello from the local agent.\",\n  schema: z.object({\n    name: z.string().default(\"world\"),\n  }),\n  http: { method: \"GET\" },\n  readOnly: true,\n  run: async ({ name }) => {\n    return { message: `Hello, ${name}!` };\n  },\n});",
+  "code": "import { defineAction } from \"@agent-native/core/action\";\nimport { z } from \"zod\";\n\nexport default defineAction({\n  description: \"Sage Hallo vom lokalen Agenten.\",\n  schema: z.object({\n    name: z.string().default(\"world\"),\n  }),\n  http: { method: \"GET\" },\n  readOnly: true,\n  run: async ({ name }) => {\n    return { message: `Hello, ${name}!` };\n  },\n});",
   "annotations": [
-    { "lines": "5", "label": "Tool description", "note": "The agent reads `description` to decide when to call this as a tool." },
-    { "lines": "6-8", "label": "Typed contract", "note": "One zod `schema` validates input from every surface — agent, UI, HTTP, MCP, and A2A." },
+    { "lines": "5", "label": "Tool-Beschreibung", "note": "Der Agent liest `description`, um zu entscheiden, wann er dies als Tool aufruft." },
+    { "lines": "6-8", "label": "Typisierter Vertrag", "note": "Ein zod-`schema` validiert Eingaben von jeder Oberfläche: Agent, UI, HTTP, MCP und A2A." },
     { "lines": "9", "label": "HTTP verb", "note": "Opt this action into an auto-mounted HTTP endpoint." },
     { "lines": "10", "label": "Read-only", "note": "`readOnly` marks the action as safe to call without approval and cacheable for queries." },
     { "lines": "11-13", "label": "One implementation", "note": "The `run` body is the single source of truth that every surface executes." }

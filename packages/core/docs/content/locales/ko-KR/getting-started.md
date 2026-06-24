@@ -74,14 +74,14 @@ pnpm install
 액션은 에이전트와 UI가 호출할 수 있는 작업 중 하나입니다. 양쪽 비계
 다음 예와 함께 제공:
 
-```an-annotated-code title="Your first action"
+```an-annotated-code title="첫 번째 action"
 {
   "filename": "actions/hello.ts",
   "language": "ts",
-  "code": "import { defineAction } from \"@agent-native/core/action\";\nimport { z } from \"zod\";\n\nexport default defineAction({\n  description: \"Say hello from the local agent.\",\n  schema: z.object({\n    name: z.string().default(\"world\"),\n  }),\n  http: { method: \"GET\" },\n  readOnly: true,\n  run: async ({ name }) => {\n    return { message: `Hello, ${name}!` };\n  },\n});",
+  "code": "import { defineAction } from \"@agent-native/core/action\";\nimport { z } from \"zod\";\n\nexport default defineAction({\n  description: \"로컬 에이전트에서 인사합니다.\",\n  schema: z.object({\n    name: z.string().default(\"world\"),\n  }),\n  http: { method: \"GET\" },\n  readOnly: true,\n  run: async ({ name }) => {\n    return { message: `Hello, ${name}!` };\n  },\n});",
   "annotations": [
-    { "lines": "5", "label": "Tool description", "note": "The agent reads `description` to decide when to call this as a tool." },
-    { "lines": "6-8", "label": "Typed contract", "note": "One zod `schema` validates input from every surface — agent, UI, HTTP, MCP, and A2A." },
+    { "lines": "5", "label": "도구 설명", "note": "에이전트는 `description`을 읽고 언제 도구로 호출할지 판단합니다." },
+    { "lines": "6-8", "label": "타입 계약", "note": "하나의 zod `schema`가 에이전트, UI, HTTP, MCP, A2A의 모든 입력을 검증합니다." },
     { "lines": "9", "label": "HTTP verb", "note": "Opt this action into an auto-mounted HTTP endpoint." },
     { "lines": "10", "label": "Read-only", "note": "`readOnly` marks the action as safe to call without approval and cacheable for queries." },
     { "lines": "11-13", "label": "One implementation", "note": "The `run` body is the single source of truth that every surface executes." }

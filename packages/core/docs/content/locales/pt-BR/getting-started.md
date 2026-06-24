@@ -74,14 +74,14 @@ De agora em diante, os dois são idênticos.
 Uma ação é uma operação que seu agente — e seu UI — podem chamar. Ambos os andaimes
 envie com este exemplo:
 
-```an-annotated-code title="Your first action"
+```an-annotated-code title="Sua primeira action"
 {
   "filename": "actions/hello.ts",
   "language": "ts",
-  "code": "import { defineAction } from \"@agent-native/core/action\";\nimport { z } from \"zod\";\n\nexport default defineAction({\n  description: \"Say hello from the local agent.\",\n  schema: z.object({\n    name: z.string().default(\"world\"),\n  }),\n  http: { method: \"GET\" },\n  readOnly: true,\n  run: async ({ name }) => {\n    return { message: `Hello, ${name}!` };\n  },\n});",
+  "code": "import { defineAction } from \"@agent-native/core/action\";\nimport { z } from \"zod\";\n\nexport default defineAction({\n  description: \"Diga olá a partir do agente local.\",\n  schema: z.object({\n    name: z.string().default(\"world\"),\n  }),\n  http: { method: \"GET\" },\n  readOnly: true,\n  run: async ({ name }) => {\n    return { message: `Hello, ${name}!` };\n  },\n});",
   "annotations": [
-    { "lines": "5", "label": "Tool description", "note": "The agent reads `description` to decide when to call this as a tool." },
-    { "lines": "6-8", "label": "Typed contract", "note": "One zod `schema` validates input from every surface — agent, UI, HTTP, MCP, and A2A." },
+    { "lines": "5", "label": "Descrição da ferramenta", "note": "O agente lê `description` para decidir quando chamar isto como ferramenta." },
+    { "lines": "6-8", "label": "Contrato tipado", "note": "Um `schema` zod valida entradas de todas as superfícies: agente, UI, HTTP, MCP e A2A." },
     { "lines": "9", "label": "HTTP verb", "note": "Opt this action into an auto-mounted HTTP endpoint." },
     { "lines": "10", "label": "Read-only", "note": "`readOnly` marks the action as safe to call without approval and cacheable for queries." },
     { "lines": "11-13", "label": "One implementation", "note": "The `run` body is the single source of truth that every surface executes." }

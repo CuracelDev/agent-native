@@ -166,7 +166,7 @@ Se você estiver criando ou estendendo um aplicativo nativo do agente, este é o
   "code": "import { defineAction } from \"@agent-native/core/action\";\nimport { z } from \"zod\";\n\nexport default defineAction({\n  description: \"Reply to an email thread\",\n  schema: z.object({ emailId: z.string(), body: z.string() }),\n  run: async ({ emailId, body }) => {\n    // db and schema come from your app's server/db setup\n    await db.insert(schema.replies).values({ emailId, body });\n  },\n});",
   "annotations": [
     { "lines": "5", "label": "Tool surface", "note": "The `description` is what the agent reads to decide when to call this as a tool." },
-    { "lines": "6", "label": "Typed contract", "note": "One zod `schema` validates input from **every** surface — agent, UI, HTTP, MCP, and A2A." },
+    { "lines": "6", "label": "Contrato tipado", "note": "One zod `schema` validates input from **every** surface — agent, UI, HTTP, MCP, and A2A." },
     { "lines": "7-10", "label": "One implementation", "note": "The `run` body is the single source of truth. The UI button and the agent tool both execute exactly this." }
   ]
 }

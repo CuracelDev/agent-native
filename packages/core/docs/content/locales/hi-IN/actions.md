@@ -42,7 +42,7 @@ import { defineAction } from "@agent-native/core/action";
 import { z } from "zod";
 
 export default defineAction({
-  description: "Say hello from the local agent.",
+  description: "Local agent से hello कहें।",
   schema: z.object({
     name: z.string().default("world"),
   }),

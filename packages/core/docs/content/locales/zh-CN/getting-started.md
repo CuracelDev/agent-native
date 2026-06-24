@@ -74,14 +74,14 @@ pnpm install
 操作是您的代理（以及您的 UI）可以调用的一项操作。两个脚手架
 附带此示例：
 
-```an-annotated-code title="Your first action"
+```an-annotated-code title="你的第一个 action"
 {
   "filename": "actions/hello.ts",
   "language": "ts",
-  "code": "import { defineAction } from \"@agent-native/core/action\";\nimport { z } from \"zod\";\n\nexport default defineAction({\n  description: \"Say hello from the local agent.\",\n  schema: z.object({\n    name: z.string().default(\"world\"),\n  }),\n  http: { method: \"GET\" },\n  readOnly: true,\n  run: async ({ name }) => {\n    return { message: `Hello, ${name}!` };\n  },\n});",
+  "code": "import { defineAction } from \"@agent-native/core/action\";\nimport { z } from \"zod\";\n\nexport default defineAction({\n  description: \"从本地代理问好。\",\n  schema: z.object({\n    name: z.string().default(\"world\"),\n  }),\n  http: { method: \"GET\" },\n  readOnly: true,\n  run: async ({ name }) => {\n    return { message: `Hello, ${name}!` };\n  },\n});",
   "annotations": [
-    { "lines": "5", "label": "Tool description", "note": "The agent reads `description` to decide when to call this as a tool." },
-    { "lines": "6-8", "label": "Typed contract", "note": "One zod `schema` validates input from every surface — agent, UI, HTTP, MCP, and A2A." },
+    { "lines": "5", "label": "工具描述", "note": "代理会读取 `description`，判断何时把它作为工具调用。" },
+    { "lines": "6-8", "label": "类型化契约", "note": "一个 zod `schema` 会校验来自每个入口的输入：代理、UI、HTTP、MCP 和 A2A。" },
     { "lines": "9", "label": "HTTP verb", "note": "Opt this action into an auto-mounted HTTP endpoint." },
     { "lines": "10", "label": "Read-only", "note": "`readOnly` marks the action as safe to call without approval and cacheable for queries." },
     { "lines": "11-13", "label": "One implementation", "note": "The `run` body is the single source of truth that every surface executes." }

@@ -42,7 +42,7 @@ import { defineAction } from "@agent-native/core/action";
 import { z } from "zod";
 
 export default defineAction({
-  description: "Say hello from the local agent.",
+  description: "Saluda desde el agente local.",
   schema: z.object({
     name: z.string().default("world"),
   }),
@@ -86,7 +86,7 @@ alrededor de actions, no es un requisito previo requerido para la acción en sí
   "code": "import { defineAction } from \"@agent-native/core/action\";\nimport { z } from \"zod\";\n\nexport default defineAction({\n  description: \"Reply to an email thread in the user's voice.\",\n  schema: z.object({\n    emailId: z.string().describe(\"The id of the email to reply to.\"),\n    body: z.string().describe(\"The reply body, in markdown.\"),\n  }),\n  run: async ({ emailId, body }) => {\n    await db.insert(replies).values({ emailId, body });\n    return { ok: true, emailId };\n  },\n});",
   "annotations": [
     { "lines": "5", "label": "Tool surface", "note": "`description` is what the agent reads to decide when to call this. The per-field `.describe()` calls flow into the JSON Schema too." },
-    { "lines": "6-9", "label": "Typed contract", "note": "One schema validates input from **every** surface and is converted to JSON Schema for the model. Invalid inputs never reach `run`." },
+    { "lines": "6-9", "label": "Contrato tipado", "note": "One schema validates input from **every** surface and is converted to JSON Schema for the model. Invalid inputs never reach `run`." },
     { "lines": "10-13", "label": "One implementation", "note": "The `run` body is the single source of truth — the UI button and the agent tool both execute exactly this." }
   ]
 }
