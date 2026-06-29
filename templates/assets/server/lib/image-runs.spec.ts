@@ -48,6 +48,7 @@ vi.mock("./image-processing.js", () => ({
 }));
 
 vi.mock("./json.js", () => ({
+  absoluteUrl: vi.fn((path: string) => path),
   nowIso: vi.fn(() => "2026-05-28T12:00:00.000Z"),
   parseJson: vi.fn((value: string | null | undefined, fallback: unknown) => {
     if (!value) return fallback;
