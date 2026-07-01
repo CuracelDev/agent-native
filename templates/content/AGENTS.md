@@ -109,7 +109,10 @@ cd templates/content && pnpm action <name> [args]
 | `write-local-component-file`                | `--workspaceId <id> --path <relative-component-path> --content <source>`                                                                                       | Create or update a file in a registered local `components/` folder                                                                      |
 | `create-content-database`                   | `[--documentId <id>] [--parentId <id>] [--title <text>]`                                                                                                       | Create a database page or convert an existing page into a database                                                                      |
 | `configure-docs-content-dogfood-workspace`  | `[--databaseId <id>] [--documentId <id>] [--title <text>] [--updateRowStatusFields true\|false]`                                                               | Create or upgrade the internal Builder docs/blog dogfood workspace with operations fields, source status fields, saved views, and row status backfill |
+| `create-inline-content-database`            | `--hostDocumentId <id> [--title <text>]`                                                                                                                       | Create a database owned by an inline database block in the host document                                                                |
 | `get-content-database`                      | `--databaseId <id>` or `--documentId <id>`                                                                                                                     | Get a database table with property schema and item pages                                                                                |
+| `list-trashed-content-databases`            |                                                                                                                                                                | List soft-deleted databases visible in the sidebar Trash surface                                                                        |
+| `restore-content-database`                  | `--databaseId <id>`                                                                                                                                            | Restore a soft-deleted database from the sidebar Trash surface                                                                          |
 | `get-content-database-source`               | `--databaseId <id>` or `--documentId <id>`                                                                                                                     | Inspect local/no-source or source-backed status, mappings, row identity, freshness, and change sets                                     |
 | `attach-content-database-source`            | `--databaseId <id>` or `--documentId <id> [--sourceType mock\|builder-cms] [--sourceName] [--sourceTable] [--relationshipMode items\|details] [--join <json>]` | Attach a source binding; use `items` to add more rows and `details` to match a source onto existing rows                                |
 | `change-content-database-source-role`       | `--databaseId <id>` or `--documentId <id> --sourceId <id> --relationshipMode items\|details [--join <json>]`                                                   | Change an attached source between adding rows and adding matched detail columns without removing the source                             |
@@ -570,10 +573,11 @@ columns updates that row page's grouping property through
 multi-select, users can add a new board group from the board itself; this
 appends a new option to the grouped property definition.
 Use
-`create-content-database`, `get-content-database`,
+`create-content-database`, `create-inline-content-database`,
 `configure-docs-content-dogfood-workspace`,
-`add-database-item`, `duplicate-database-item`, `duplicate-database-items`,
-`delete-database-items`, `move-database-item`,
+`get-content-database`, `list-trashed-content-databases`,
+`restore-content-database`, `add-database-item`, `duplicate-database-item`,
+`duplicate-database-items`, `delete-database-items`, `move-database-item`,
 `update-content-database-view`, `list-document-properties`,
 `configure-document-property`, `set-document-property`,
 `duplicate-document-property`, and `delete-document-property`; do not edit
