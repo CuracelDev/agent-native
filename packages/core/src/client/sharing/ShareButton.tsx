@@ -629,7 +629,6 @@ function SharePanel(
   const visibility: Visibility =
     visibilityOverride ?? (data?.visibility as Visibility | null) ?? "private";
   const canManage = data?.role === "owner" || data?.role === "admin";
-  const canChangeVisibility = canManage || Boolean(data?.role);
   const meta = visibilityMeta(visibility, props.visibilityCopy);
   const peopleAccessLabel = props.peopleAccessLabel ?? "People with access";
   const generalAccessLabel = props.generalAccessLabel ?? "General access";
@@ -694,8 +693,8 @@ function SharePanel(
 
   const handleVisibility = (next: Visibility) => {
     if (next === visibility) return;
-    if (!canManage && next !== "org") {
-      setShareError("Only owners and admins can set private or public access.");
+    if (!canManage) {
+      setShareError("Only owners and admins can change access.");
       return;
     }
     setShareError(null);
@@ -1013,12 +1012,9 @@ function SharePanel(
           <VisibilitySelect
             value={visibility}
             onChange={handleVisibility}
-            disabled={!canChangeVisibility}
+            disabled={!canManage}
             visibilityCopy={props.visibilityCopy}
-            allowPrivate={canManage || visibility === "private"}
-            allowPublic={
-              policy.allowPublic && (canManage || visibility === "public")
-            }
+            allowPublic={policy.allowPublic}
           />
           <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
             <span>{meta.description}</span>

@@ -372,12 +372,11 @@ function LinkTab(props: {
   const visibility: Visibility =
     (data?.visibility as Visibility | null) ?? "private";
   const canManage = data?.role === "owner" || data?.role === "admin";
-  const canChangeVisibility = canManage || Boolean(data?.role);
   const meta = visibilityMeta[visibility];
 
   const handleVisibility = (next: Visibility) => {
     if (next === visibility) return;
-    if (!canManage && next !== "org") return;
+    if (!canManage) return;
     setVisibility.mutate(
       { resourceType, resourceId, visibility: next } as any,
       { onSuccess: () => sharesQuery.refetch() },
@@ -401,9 +400,7 @@ function LinkTab(props: {
             <VisibilitySelect
               value={visibility}
               onChange={handleVisibility}
-              disabled={!canChangeVisibility}
-              allowPrivate={canManage || visibility === "private"}
-              allowPublic={canManage || visibility === "public"}
+              disabled={!canManage}
             />
             <div className="mt-0.5 text-xs text-muted-foreground">
               {meta.description}
@@ -456,7 +453,6 @@ function InviteTab(props: {
   const visibility: Visibility =
     (data?.visibility as Visibility | null) ?? "private";
   const canManage = data?.role === "owner" || data?.role === "admin";
-  const canChangeVisibility = canManage || Boolean(data?.role);
   const meta = visibilityMeta[visibility];
 
   const handleAdd = () => {
@@ -495,7 +491,7 @@ function InviteTab(props: {
 
   const handleVisibility = (next: Visibility) => {
     if (next === visibility) return;
-    if (!canManage && next !== "org") return;
+    if (!canManage) return;
     setVisibility.mutate(
       { resourceType, resourceId, visibility: next } as any,
       { onSuccess: () => sharesQuery.refetch() },
@@ -607,9 +603,7 @@ function InviteTab(props: {
               <VisibilitySelect
                 value={visibility}
                 onChange={handleVisibility}
-                disabled={!canChangeVisibility}
-                allowPrivate={canManage || visibility === "private"}
-                allowPublic={canManage || visibility === "public"}
+                disabled={!canManage}
               />
               <div className="mt-0.5 text-xs text-muted-foreground">
                 {meta.description}
