@@ -451,6 +451,13 @@ describe("shareable resource access helpers", () => {
           resourceId: "doc-actions",
           visibility: "org",
         }),
+      ).resolves.toEqual({ ok: true, visibility: "org" });
+      await expect(
+        setResourceVisibility.run({
+          resourceType,
+          resourceId: "doc-actions",
+          visibility: "private",
+        }),
       ).rejects.toBeInstanceOf(ForbiddenError);
     });
 

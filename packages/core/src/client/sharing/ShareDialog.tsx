@@ -372,10 +372,12 @@ function LinkTab(props: {
   const visibility: Visibility =
     (data?.visibility as Visibility | null) ?? "private";
   const canManage = data?.role === "owner" || data?.role === "admin";
+  const canChangeVisibility = canManage || Boolean(data?.role);
   const meta = visibilityMeta[visibility];
 
   const handleVisibility = (next: Visibility) => {
     if (next === visibility) return;
+    if (!canManage && next !== "org") return;
     setVisibility.mutate(
       { resourceType, resourceId, visibility: next } as any,
       { onSuccess: () => sharesQuery.refetch() },
@@ -399,7 +401,9 @@ function LinkTab(props: {
             <VisibilitySelect
               value={visibility}
               onChange={handleVisibility}
-              disabled={!canManage}
+              disabled={!canChangeVisibility}
+              allowPrivate={canManage || visibility === "private"}
+              allowPublic={canManage || visibility === "public"}
             />
             <div className="mt-0.5 text-xs text-muted-foreground">
               {meta.description}
@@ -452,6 +456,7 @@ function InviteTab(props: {
   const visibility: Visibility =
     (data?.visibility as Visibility | null) ?? "private";
   const canManage = data?.role === "owner" || data?.role === "admin";
+  const canChangeVisibility = canManage || Boolean(data?.role);
   const meta = visibilityMeta[visibility];
 
   const handleAdd = () => {
@@ -490,6 +495,7 @@ function InviteTab(props: {
 
   const handleVisibility = (next: Visibility) => {
     if (next === visibility) return;
+    if (!canManage && next !== "org") return;
     setVisibility.mutate(
       { resourceType, resourceId, visibility: next } as any,
       { onSuccess: () => sharesQuery.refetch() },
@@ -601,7 +607,9 @@ function InviteTab(props: {
               <VisibilitySelect
                 value={visibility}
                 onChange={handleVisibility}
-                disabled={!canManage}
+                disabled={!canChangeVisibility}
+                allowPrivate={canManage || visibility === "private"}
+                allowPublic={canManage || visibility === "public"}
               />
               <div className="mt-0.5 text-xs text-muted-foreground">
                 {meta.description}
@@ -762,10 +770,20 @@ function VisibilitySelect(props: {
   value: Visibility;
   onChange: (v: Visibility) => void;
   disabled?: boolean;
+  allowPrivate?: boolean;
+  allowPublic?: boolean;
 }) {
   const t = useT();
   const visibilityMeta = useVisibilityMeta();
   const current = visibilityMeta[props.value];
+  const allowPrivate = props.allowPrivate !== false;
+  const allowPublic = props.allowPublic !== false;
+  const options = (Object.keys(VIS_ICONS) as Visibility[]).filter((k) => {
+    if (k === props.value) return true;
+    if (k === "private" && !allowPrivate) return false;
+    if (k === "public" && !allowPublic) return false;
+    return true;
+  });
   return (
     <Select.Root
       value={props.value}
@@ -792,7 +810,7 @@ function VisibilitySelect(props: {
         >
           <Select.Viewport>
             <SelectItems
-              items={(Object.keys(VIS_ICONS) as Visibility[]).map((k) => ({
+              items={options.map((k) => ({
                 value: k,
                 label: visibilityMeta[k].label,
                 description: visibilityMeta[k].description,

@@ -71,12 +71,9 @@ import { normalizeDesignSourceType } from "@shared/source-mode";
 import {
   IconArrowLeft,
   IconArrowUpRight,
-  IconArrowsMaximize,
   IconPencil,
   IconMessage,
   IconBrush,
-  IconZoomIn,
-  IconZoomOut,
   IconDeviceDesktop,
   IconDeviceTablet,
   IconDeviceMobile,
@@ -307,6 +304,8 @@ const BOARD_SURFACE_SIZE = 131_072;
 const LOCALHOST_WRITE_EXTENSIONS = new Set([".html", ".htm", ".css"]);
 const NO_LOCALHOST_WRITE_CONTENT_MESSAGE =
   "No content to write. Open the screen first." /* i18n-ignore */;
+const TWEAK_CONTROLS_EDIT_ACCESS_MESSAGE =
+  "You need edit access to add tweak controls." /* i18n-ignore */;
 const FOCUSED_SCREEN_ZOOM = 100;
 export const DEFAULT_OVERVIEW_ZOOM = 60;
 const KEEPALIVE_FILE_SAVE_MAX_BYTES = 60_000;
@@ -3752,10 +3751,17 @@ function DesignCollaboratorsMenu({
           return (
             <DropdownMenuItem
               key={user.email}
-              onSelect={() => {
-                if (!collaborator.isCurrent) onAvatarClick?.(user);
+              onSelect={(event) => {
+                if (collaborator.isCurrent) {
+                  event.preventDefault();
+                  return;
+                }
+                onAvatarClick?.(user);
               }}
-              className="gap-2"
+              className={cn(
+                "gap-2",
+                collaborator.isCurrent && "cursor-default",
+              )}
             >
               <DesignCollaboratorAvatar collaborator={collaborator} />
               <span className="min-w-0 flex-1">
@@ -3766,9 +3772,17 @@ function DesignCollaboratorsMenu({
                   {user.email}
                 </span>
               </span>
-              {isFollowing ? (
+              {collaborator.isCurrent ? (
+                <span className="text-xs text-muted-foreground">
+                  {"You" /* i18n-ignore collaborator row */}
+                </span>
+              ) : isFollowing ? (
                 <IconCheck className="size-3.5 text-[var(--design-editor-accent-color)]" />
-              ) : null}
+              ) : (
+                <span className="text-xs text-muted-foreground">
+                  {"Follow" /* i18n-ignore collaborator row */}
+                </span>
+              )}
             </DropdownMenuItem>
           );
         })}
@@ -9007,8 +9021,11 @@ export default function DesignEditor() {
       files: UploadedFile[],
       options: PromptComposerSubmitOptions,
     ) => {
-      if (!canEditDesign || !design || generating || pendingGenerationActive)
+      if (!canEditDesign) {
+        toast.error(TWEAK_CONTROLS_EDIT_ACCESS_MESSAGE);
         return;
+      }
+      if (!design) return;
       const trimmed = prompt.trim();
       if (!trimmed) return;
       const fileContext = formatUploadedFileContext(files);
@@ -9041,6 +9058,7 @@ export default function DesignEditor() {
         context,
         submit: true,
         openSidebar: true,
+        newTab: true,
         model: options.model,
         engine: options.engine,
         effort: options.effort,
@@ -9052,10 +9070,8 @@ export default function DesignEditor() {
       activeFile,
       canEditDesign,
       design,
-      generating,
       handleTweakPromptOpenChange,
       id,
-      pendingGenerationActive,
       tweakSelections,
       tweaks,
     ],
@@ -9245,6 +9261,45 @@ export default function DesignEditor() {
     });
   }, [activeFile, design?.title, id, selectedCodeLayerNode, selectedElement]);
 
+  const handleAssetInserted = useCallback(
+    (selection: {
+      fileId?: string;
+      nodeId?: string;
+      selector?: string;
+      title?: string;
+    }) => {
+      if (selection.fileId) {
+        setActiveFileId(selection.fileId);
+        if (viewModeRef.current === "overview") {
+          setOverviewSelectedScreenIds([selection.fileId]);
+        }
+      }
+      if (selection.nodeId) {
+        setSelectedLayerIdsState([selection.nodeId]);
+      }
+      if (selection.selector || selection.nodeId) {
+        setSelectedElement({
+          tagName: "section",
+          sourceId: selection.nodeId,
+          selector:
+            selection.selector ??
+            `[data-agent-native-node-id="${selection.nodeId}"]`,
+          classes: [],
+          computedStyles: {},
+          boundingRect: { x: 0, y: 0, width: 0, height: 0 },
+          textContent: selection.title,
+          isFlexChild: false,
+          isFlexContainer: false,
+        });
+      }
+      setHoveredElement(null);
+      setHoveredElementScreenId(null);
+      setActiveTool("move");
+      setMode("edit");
+    },
+    [],
+  );
+
   const designExtensionContext = useMemo<DesignExtensionSlotContext>(
     () => ({
       designId: id ?? "",
@@ -9281,6 +9336,7 @@ export default function DesignEditor() {
           updatedAt,
         });
       },
+      onAssetInserted: handleAssetInserted,
     }),
     [
       activeContent,
@@ -9293,6 +9349,7 @@ export default function DesignEditor() {
       clearShaderFillPreview,
       design?.title,
       files,
+      handleAssetInserted,
       id,
       mode,
       overviewSelectedScreenIds,
@@ -15550,6 +15607,20 @@ ${serializedHtml}
   );
 
   const zoomLabel = `${Math.round(zoom)}%`;
+  const [zoomMenuOpen, setZoomMenuOpen] = useState(false);
+  const [zoomInputValue, setZoomInputValue] = useState(zoomLabel);
+  useEffect(() => {
+    if (!zoomMenuOpen) setZoomInputValue(zoomLabel);
+  }, [zoomLabel, zoomMenuOpen]);
+  const commitZoomInput = useCallback(() => {
+    const next = Number(zoomInputValue.replace("%", "").trim());
+    if (!Number.isFinite(next)) {
+      setZoomInputValue(zoomLabel);
+      return;
+    }
+    setZoom(Math.max(10, Math.min(500, next)));
+    setZoomMenuOpen(false);
+  }, [setZoom, zoomInputValue, zoomLabel]);
 
   const handleTokensApplied = useCallback(
     (resolvedCssVars: Record<string, string>) => {
@@ -15889,8 +15960,8 @@ ${serializedHtml}
       </span>
     );
 
-  const zoomControl = (
-    <DropdownMenu>
+  const renderZoomControl = () => (
+    <DropdownMenu open={zoomMenuOpen} onOpenChange={setZoomMenuOpen}>
       <Tooltip>
         <TooltipTrigger asChild>
           <DropdownMenuTrigger asChild>
@@ -15906,29 +15977,66 @@ ${serializedHtml}
         </TooltipTrigger>
         <TooltipContent>{t("designEditor.zoom")}</TooltipContent>
       </Tooltip>
-      <DropdownMenuContent align="end" className="w-40">
-        <DropdownMenuItem onClick={handleZoomOut}>
-          <IconZoomOut className="mr-2 h-4 w-4" />
-          {t("designEditor.zoomOut")}
+      <DropdownMenuContent
+        align="end"
+        className="w-72 overflow-hidden rounded-xl border-[var(--design-editor-control-border)] bg-[var(--design-editor-panel-bg)] p-0 shadow-2xl"
+      >
+        <div className="p-3">
+          <Input
+            autoFocus
+            value={zoomInputValue}
+            onChange={(event) => setZoomInputValue(event.target.value)}
+            onFocus={(event) => event.currentTarget.select()}
+            onKeyDown={(event) => {
+              event.stopPropagation();
+              if (event.key === "Enter") {
+                event.preventDefault();
+                commitZoomInput();
+              } else if (event.key === "Escape") {
+                event.preventDefault();
+                setZoomInputValue(zoomLabel);
+                setZoomMenuOpen(false);
+              }
+            }}
+            className="h-10 rounded-md border-[var(--design-editor-accent-color)] bg-[var(--design-editor-control-bg)] px-3 text-base font-medium tabular-nums text-foreground shadow-none focus-visible:ring-2 focus-visible:ring-[var(--design-editor-accent-color)]"
+            aria-label={"Zoom percentage" /* i18n-ignore zoom field */}
+          />
+        </div>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onClick={handleZoomIn}
+          className="h-12 px-12 text-[15px]"
+        >
+          <span className="flex-1">{"Zoom in" /* i18n-ignore */}</span>
+          <DropdownMenuShortcut>⌘+</DropdownMenuShortcut>
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={handleZoomIn}>
-          <IconZoomIn className="mr-2 h-4 w-4" />
-          {t("designEditor.zoomIn")}
+        <DropdownMenuItem
+          onClick={handleZoomOut}
+          className="h-12 px-12 text-[15px]"
+        >
+          <span className="flex-1">{"Zoom out" /* i18n-ignore */}</span>
+          <DropdownMenuShortcut>⌘−</DropdownMenuShortcut>
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={handleZoomToFit}>
-          <IconArrowsMaximize className="mr-2 h-4 w-4" />
-          {"Fit to screen" /* i18n-ignore zoom option */}
+        <DropdownMenuItem
+          onClick={handleZoomToFit}
+          className="h-12 px-12 text-[15px]"
+        >
+          <span className="flex-1">{"Zoom to fit" /* i18n-ignore */}</span>
           <DropdownMenuShortcut>⇧1</DropdownMenuShortcut>
         </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        {ZOOM_PRESETS.map((preset) => (
+        {[50, 100, 200].map((preset) => (
           <DropdownMenuItem
             key={preset}
             onClick={() => setZoom(preset)}
-            className="justify-between"
+            className="h-12 px-12 text-[15px]"
           >
-            <span>{preset}%</span>
-            {Math.round(zoom) === preset && <IconCheck className="h-4 w-4" />}
+            <span className="flex-1">
+              {"Zoom to " /* i18n-ignore */}
+              {preset}%
+            </span>
+            {preset === 100 ? (
+              <DropdownMenuShortcut>⌘0</DropdownMenuShortcut>
+            ) : null}
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>
@@ -16445,52 +16553,7 @@ ${serializedHtml}
                   </DropdownMenuContent>
                 </DropdownMenu>
 
-                {/* Zoom — collapsed into a single menu. */}
-                <DropdownMenu>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 gap-1 px-2 text-xs tabular-nums text-muted-foreground cursor-pointer"
-                        >
-                          {zoomLabel}
-                          <IconChevronDown className="w-3 h-3 opacity-60" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                    </TooltipTrigger>
-                    <TooltipContent>{t("designEditor.zoom")}</TooltipContent>
-                  </Tooltip>
-                  <DropdownMenuContent align="end" className="w-40">
-                    <DropdownMenuItem onClick={handleZoomOut}>
-                      <IconZoomOut className="mr-2 h-4 w-4" />
-                      {t("designEditor.zoomOut")}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={handleZoomIn}>
-                      <IconZoomIn className="mr-2 h-4 w-4" />
-                      {t("designEditor.zoomIn")}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={handleZoomToFit}>
-                      <IconArrowsMaximize className="mr-2 h-4 w-4" />
-                      {"Fit to screen" /* i18n-ignore zoom option */}
-                      <DropdownMenuShortcut>⇧1</DropdownMenuShortcut>
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    {ZOOM_PRESETS.map((preset) => (
-                      <DropdownMenuItem
-                        key={preset}
-                        onClick={() => setZoom(preset)}
-                        className="justify-between"
-                      >
-                        <span>{preset}%</span>
-                        {Math.round(zoom) === preset && (
-                          <IconCheck className="h-4 w-4" />
-                        )}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                {renderZoomControl()}
 
                 <div className="mx-1 h-5 w-px bg-border" />
               </>
@@ -17564,7 +17627,7 @@ ${serializedHtml}
                   selectedElements={selectedInspectorElements}
                   pageStyles={pageStyles}
                   zoom={zoom}
-                  headerTrailing={zoomControl}
+                  headerTrailing={renderZoomControl()}
                   width={rightSidebarWidth}
                   activeTab={activeInspectorTab}
                   onActiveTabChange={setActiveInspectorTab}
@@ -17824,7 +17887,7 @@ ${serializedHtml}
         title={t("designEditor.tweaksPromptTitle")}
         placeholder={t("designEditor.tweaksPlaceholder")}
         onSubmit={handleTweakPromptSubmit}
-        loading={generating || pendingGenerationActive}
+        loading={false}
         anchorRef={tweakPromptAnchorRef}
       />
 

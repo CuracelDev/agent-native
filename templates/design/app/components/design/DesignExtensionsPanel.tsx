@@ -108,6 +108,12 @@ export interface DesignExtensionSlotContext extends Record<string, unknown> {
     content: string,
     updatedAt?: string,
   ) => void;
+  onAssetInserted?: (selection: {
+    fileId?: string;
+    nodeId?: string;
+    selector?: string;
+    title?: string;
+  }) => void;
 }
 
 interface DesignExtensionsPanelProps {
@@ -301,6 +307,7 @@ interface FirstPartyRowProps {
 
 function FirstPartyExtRow({
   label,
+  description,
   icon,
   badge,
   isOpen,
@@ -321,14 +328,14 @@ function FirstPartyExtRow({
           <span className="block truncate text-sm font-medium leading-tight text-foreground">
             {label}
           </span>
-          <span className="mt-0.5 block truncate text-xs leading-none text-muted-foreground">
-            <span className="truncate">Built-in</span>
+          <span className="mt-0.5 line-clamp-1 text-xs leading-snug text-muted-foreground">
+            {description}
           </span>
         </span>
         {badge}
       </button>
       {isOpen && (
-        <div className="mb-2 ml-[3.75rem] overflow-hidden rounded-md border border-border/70 bg-background/70">
+        <div className="mb-2 mt-1 overflow-hidden rounded-md border border-border/70 bg-background/70">
           {children}
         </div>
       )}
@@ -469,6 +476,25 @@ export function AssetLibraryPanel({ context }: AssetLibraryPanelProps) {
       : undefined,
     { enabled: Boolean(figmaRequest) },
   );
+  const notifyAssetInserted = useCallback(
+    (result: unknown, title: string) => {
+      if (!result || typeof result !== "object") return;
+      const row = result as Record<string, unknown>;
+      context.onAssetInserted?.({
+        fileId: typeof row.fileId === "string" ? row.fileId : undefined,
+        nodeId:
+          typeof row.insertedNodeId === "string"
+            ? row.insertedNodeId
+            : undefined,
+        selector:
+          typeof row.insertedSelector === "string"
+            ? row.insertedSelector
+            : undefined,
+        title,
+      });
+    },
+    [context],
+  );
 
   const handleReady = useCallback(
     (_payload: unknown, _event: MessageEvent, ref: EmbeddedAppRef) => {
@@ -514,7 +540,8 @@ export function AssetLibraryPanel({ context }: AssetLibraryPanelProps) {
           fileId: context.activeFileId || undefined,
         },
         {
-          onSuccess: () => {
+          onSuccess: (result) => {
+            notifyAssetInserted(result, title ?? altText ?? "Asset");
             toast.success("Asset inserted into design.");
           },
           onError: () => {
@@ -523,7 +550,7 @@ export function AssetLibraryPanel({ context }: AssetLibraryPanelProps) {
         },
       );
     },
-    [context.designId, context.activeFileId, insertAsset],
+    [context.designId, context.activeFileId, insertAsset, notifyAssetInserted],
   );
 
   const handleInsertNativeAsset = (asset: DesignNativeAsset) => {
@@ -534,7 +561,8 @@ export function AssetLibraryPanel({ context }: AssetLibraryPanelProps) {
         fileId: context.activeFileId || undefined,
       },
       {
-        onSuccess: () => {
+        onSuccess: (result) => {
+          notifyAssetInserted(result, asset.title);
           toast.success(`${asset.title} inserted into design.`);
         },
         onError: (error) => {
@@ -572,7 +600,8 @@ export function AssetLibraryPanel({ context }: AssetLibraryPanelProps) {
         fileId: context.activeFileId || undefined,
       },
       {
-        onSuccess: () => {
+        onSuccess: (result) => {
+          notifyAssetInserted(result, asset.name);
           toast.success("Figma asset inserted into design.");
         },
         onError: (error) => {

@@ -629,6 +629,7 @@ function SharePanel(
   const visibility: Visibility =
     visibilityOverride ?? (data?.visibility as Visibility | null) ?? "private";
   const canManage = data?.role === "owner" || data?.role === "admin";
+  const canChangeVisibility = canManage || Boolean(data?.role);
   const meta = visibilityMeta(visibility, props.visibilityCopy);
   const peopleAccessLabel = props.peopleAccessLabel ?? "People with access";
   const generalAccessLabel = props.generalAccessLabel ?? "General access";
@@ -693,6 +694,10 @@ function SharePanel(
 
   const handleVisibility = (next: Visibility) => {
     if (next === visibility) return;
+    if (!canManage && next !== "org") {
+      setShareError("Only owners and admins can set private or public access.");
+      return;
+    }
     setShareError(null);
     void onVisibilityChange(next).catch((err) => {
       setShareError(extractShareErrorMessage(err));
@@ -1008,9 +1013,12 @@ function SharePanel(
           <VisibilitySelect
             value={visibility}
             onChange={handleVisibility}
-            disabled={!canManage}
+            disabled={!canChangeVisibility}
             visibilityCopy={props.visibilityCopy}
-            allowPublic={policy.allowPublic}
+            allowPrivate={canManage || visibility === "private"}
+            allowPublic={
+              policy.allowPublic && (canManage || visibility === "public")
+            }
           />
           <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
             <span>{meta.description}</span>
@@ -1024,6 +1032,15 @@ function SharePanel(
           </div>
         </div>
       </div>
+
+      {shareError && !canManage ? (
+        <div
+          role="alert"
+          className="mb-4 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+        >
+          {shareError}
+        </div>
+      ) : null}
 
       {props.accessNote ? (
         <div className="mb-4 rounded-md border border-border bg-muted/35 p-3 text-xs text-muted-foreground">
@@ -1589,14 +1606,20 @@ function VisibilitySelect(props: {
   onChange: (v: Visibility) => void;
   disabled?: boolean;
   visibilityCopy?: ShareButtonProps["visibilityCopy"];
+  /** When false, the "Private" option is omitted unless currently selected. */
+  allowPrivate?: boolean;
   /** When false, the "Public" option is omitted. Default: true. */
   allowPublic?: boolean;
 }) {
+  const allowPrivate = props.allowPrivate !== false;
   const allowPublic = props.allowPublic !== false;
   const current = visibilityMeta(props.value, props.visibilityCopy);
-  const options = (Object.keys(VIS_META) as Visibility[]).filter(
-    (k) => allowPublic || k !== "public",
-  );
+  const options = (Object.keys(VIS_META) as Visibility[]).filter((k) => {
+    if (k === props.value) return true;
+    if (k === "private" && !allowPrivate) return false;
+    if (k === "public" && !allowPublic) return false;
+    return true;
+  });
   return (
     <Select.Root
       value={props.value}
