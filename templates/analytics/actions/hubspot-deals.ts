@@ -6,6 +6,7 @@ import {
   getDealPipelines,
   getDealOwners,
   getVisiblePipelines,
+  searchHubSpotDealsByRiskStatuses,
   searchHubSpotObjects,
   type Deal,
   type Pipeline,
@@ -353,6 +354,9 @@ export default defineAction({
       .describe(
         "Optional HubSpot full-text deal search query, such as a company name, deal name, domain, or keyword. Use for customer/deal deep dives. Do not use query as a substitute for field-specific product, pipeline, stage, or date filters.",
       ),
+    riskStatuses: StringListSchema.describe(
+      "Optional exact risk_status values (e.g. Churn Risk, On the Radar). Uses HubSpot CRM search on risk_status instead of the full deal catalog — the fast path for at-risk renewal cohorts.",
+    ),
     limit: z.coerce
       .number()
       .int()
@@ -386,10 +390,40 @@ export default defineAction({
     closedDateFrom,
     closedDateTo,
     query,
+    riskStatuses,
     limit = 25,
     offset = 0,
     after,
   }) => {
+    if (riskStatuses && riskStatuses.length > 0) {
+      const [searchResult, allPipelines, owners] = await Promise.all([
+        searchHubSpotDealsByRiskStatuses({
+          riskStatuses,
+          limit,
+          after,
+          extraProperties: properties,
+        }),
+        getDealPipelines(),
+        getDealOwners(),
+      ]);
+      const visiblePipelines = getVisiblePipelines(allPipelines);
+      const lookups = stageLookups(visiblePipelines);
+      const deals = searchResult.deals.map((deal) =>
+        enrichDeal(deal, lookups, owners),
+      );
+
+      return {
+        deals,
+        stageLabels: lookups.stageLabels,
+        pipelineLabels: lookups.pipelineLabels,
+        total: searchResult.total,
+        count: deals.length,
+        nextAfter: searchResult.nextAfter,
+        guidance:
+          "Loaded via HubSpot CRM search on risk_status instead of scanning the full deal catalog. Page with the returned nextAfter cursor for more results.",
+      };
+    }
+
     const trimmedQuery = query?.trim();
     const trimmedOwner = owner?.trim();
     const trimmedProduct = product?.trim();

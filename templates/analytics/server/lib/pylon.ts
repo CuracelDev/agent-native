@@ -76,6 +76,99 @@ export async function getAccounts(query?: string): Promise<PylonAccount[]> {
   return data.data ?? (data as any);
 }
 
+// Accounts flagged with a risk sentiment in Pylon before HubSpot's
+// `risk_status` has caught up — the early-warning cohort for the risk review.
+export const PYLON_RISK_SENTIMENTS = new Set([
+  "frustrated",
+  "high_risk_detractor",
+]);
+
+export function isRiskSentiment(
+  sentiment: string | null | undefined,
+): boolean {
+  return !!sentiment && PYLON_RISK_SENTIMENTS.has(sentiment.toLowerCase());
+}
+
+function extractSentiment(account: PylonAccount): string | null {
+  const raw =
+    (account.sentiment as string | undefined) ??
+    (account.health_sentiment as string | undefined) ??
+    ((account.custom_fields as Record<string, unknown> | undefined)
+      ?.sentiment as string | undefined);
+  return typeof raw === "string" && raw.trim()
+    ? raw.trim().toLowerCase()
+    : null;
+}
+
+function extractDomain(account: PylonAccount): string | null {
+  const domain = account.domain;
+  return typeof domain === "string" && domain.trim()
+    ? domain.trim().toLowerCase()
+    : null;
+}
+
+export async function getAllPylonAccounts(): Promise<PylonAccount[]> {
+  const fullCacheKey = scopedCredentialCacheKey(
+    "accounts-full",
+    "PYLON_API_KEY",
+  );
+  const cached = cache.get(fullCacheKey);
+  if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
+    return cached.data as PylonAccount[];
+  }
+
+  const all: PylonAccount[] = [];
+  let cursor: string | undefined;
+  for (let page = 0; page < 50; page++) {
+    const params = new URLSearchParams({ limit: "100" });
+    if (cursor) params.set("cursor", cursor);
+    const data = await apiGet<{
+      data: PylonAccount[];
+      pagination?: { cursor?: string | null; has_next_page?: boolean };
+    }>(`/accounts?${params.toString()}`, `accounts:page:${cursor ?? "start"}`);
+    all.push(...(data.data ?? []));
+    cursor = data.pagination?.cursor ?? undefined;
+    if (!cursor || !data.pagination?.has_next_page) break;
+  }
+
+  cache.set(fullCacheKey, { data: all, ts: Date.now() });
+  return all;
+}
+
+export interface PylonSentimentEntry {
+  sentiment: string;
+  pylonAccountId: string;
+  accountName: string;
+}
+
+export interface PylonSentimentMap {
+  byAccountId: Map<string, PylonSentimentEntry>;
+  byDomain: Map<string, PylonSentimentEntry>;
+}
+
+// Builds a lookup keyed by both Pylon account id and domain so HubSpot deals
+// can be joined either way when enriching the risk meeting cohort.
+export async function getPylonSentimentMap(): Promise<PylonSentimentMap> {
+  const accounts = await getAllPylonAccounts();
+  const byAccountId = new Map<string, PylonSentimentEntry>();
+  const byDomain = new Map<string, PylonSentimentEntry>();
+
+  for (const account of accounts) {
+    const sentiment = extractSentiment(account);
+    if (!sentiment) continue;
+    const entry: PylonSentimentEntry = {
+      sentiment,
+      pylonAccountId: account.id,
+      accountName: account.name,
+    };
+    byAccountId.set(account.id, entry);
+    const domain = extractDomain(account);
+    if (domain) byDomain.set(domain, entry);
+  }
+
+  return { byAccountId, byDomain };
+}
+
 export async function getAccount(id: string): Promise<PylonAccount> {
   return apiGet<PylonAccount>(`/accounts/${id}`);
 }
