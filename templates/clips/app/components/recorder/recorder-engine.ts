@@ -1120,6 +1120,7 @@ export class RecorderEngine {
       hasCamera,
     };
     this.lastFinalizeMeta = finalizeMeta;
+    this.cleanupTracks();
 
     // Drain any legacy in-flight chunk uploads before we either compress or
     // upload. New recordings upload after stop(), but keeping this guard makes
@@ -1672,41 +1673,92 @@ export class RecorderEngine {
     // Keep binary uploads comfortably under Netlify's effective function
     // payload limit. This mirrors the local-file upload path in record.tsx.
     const UPLOAD_SLICE_BYTES = 3 * 1024 * 1024;
+    const PARALLELISM = 4;
     const totalSlices = Math.max(1, Math.ceil(blob.size / UPLOAD_SLICE_BYTES));
 
-    let lastResult: Record<string, unknown> | undefined;
-    for (let i = 0; i < totalSlices; i++) {
-      if (signal?.aborted) {
-        throw signal.reason instanceof Error
-          ? signal.reason
-          : new Error("Upload aborted");
-      }
-
+    const slices = Array.from({ length: totalSlices }, (_, i) => {
       const start = i * UPLOAD_SLICE_BYTES;
       const end = Math.min(start + UPLOAD_SLICE_BYTES, blob.size);
-      const slice = blob.slice(start, end, mimeType);
-      const isFinal = i === totalSlices - 1;
-      const index = this.chunkIndex++;
+      return {
+        index: this.chunkIndex++,
+        slice: blob.slice(start, end, mimeType),
+        isFinal: i === totalSlices - 1,
+      };
+    });
+    const finalSlice = slices[slices.length - 1];
+    const parallelSlices = slices.slice(0, -1);
 
-      lastResult = await this.uploadChunk(slice, index, {
-        isFinal,
-        total: totalSlices,
-        mimeType,
-        durationMs: isFinal ? meta.durationMs : undefined,
-        width: isFinal ? meta.dimensions.width : undefined,
-        height: isFinal ? meta.dimensions.height : undefined,
-        hasAudio: isFinal ? meta.hasAudio : undefined,
-        hasCamera: isFinal ? meta.hasCamera : undefined,
-        signal,
-      });
-      this.opts.onChunk?.({
-        index,
-        bytes: slice.size,
-        total: totalSlices,
+    const results = new Array<Record<string, unknown> | undefined>(totalSlices);
+    const queue = parallelSlices.slice();
+    const chunkAbort = new AbortController();
+    if (signal?.aborted) {
+      chunkAbort.abort(signal.reason);
+    } else {
+      signal?.addEventListener("abort", () => chunkAbort.abort(signal.reason), {
+        once: true,
       });
     }
+    let uploadError: Error | null = null;
 
-    return lastResult;
+    const worker = async () => {
+      while (queue.length > 0) {
+        if (chunkAbort.signal.aborted) break;
+        const item = queue.shift();
+        if (!item) break;
+        const { index, slice } = item;
+        try {
+          results[index] = await this.uploadChunk(slice, index, {
+            isFinal: false,
+            total: totalSlices,
+            mimeType,
+            signal: chunkAbort.signal,
+          });
+          this.opts.onChunk?.({ index, bytes: slice.size, total: totalSlices });
+        } catch (err) {
+          if (chunkAbort.signal.aborted) return;
+          uploadError = err instanceof Error ? err : new Error(String(err));
+          chunkAbort.abort(uploadError);
+          return;
+        }
+      }
+    };
+
+    await Promise.all(
+      Array.from(
+        { length: Math.min(PARALLELISM, parallelSlices.length) },
+        worker,
+      ),
+    );
+
+    if (uploadError) throw uploadError;
+    if (signal?.aborted) {
+      throw signal.reason instanceof Error
+        ? signal.reason
+        : new Error("Upload aborted");
+    }
+
+    results[finalSlice.index] = await this.uploadChunk(
+      finalSlice.slice,
+      finalSlice.index,
+      {
+        isFinal: true,
+        total: totalSlices,
+        mimeType,
+        durationMs: meta.durationMs,
+        width: meta.dimensions.width,
+        height: meta.dimensions.height,
+        hasAudio: meta.hasAudio,
+        hasCamera: meta.hasCamera,
+        signal,
+      },
+    );
+    this.opts.onChunk?.({
+      index: finalSlice.index,
+      bytes: finalSlice.slice.size,
+      total: totalSlices,
+    });
+
+    return results[finalSlice.index];
   }
 
   private async uploadChunk(
