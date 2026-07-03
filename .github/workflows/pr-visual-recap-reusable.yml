@@ -298,9 +298,9 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="$RECAP_CLI_VERSION"
-            if [ "$VERSION" = "latest" ]; then
-              VERSION="$(npm view @agent-native/core@latest version)"
-            fi
+          if [ "$VERSION" = "latest" ]; then
+            VERSION="$(npm view @agent-native/core@latest version)"
+          fi
           for attempt in 1 2 3; do
             if npm install --prefix "$RUNNER_TEMP/recap-cli" --no-audit --no-fund "@agent-native/core@$VERSION"; then
               break
@@ -315,6 +315,7 @@ jobs:
         if: steps.decide.outputs.run == 'true'
         env:
           PR_NUMBER_ENV: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           if git cat-file -e "${HEAD_SHA}^{commit}" 2>/dev/null; then
@@ -562,6 +563,8 @@ jobs:
         continue-on-error: true
         env:
           PREV_PLAN_ID: ${{ steps.prev.outputs.plan_id }}
+          PLAN_RECAP_TOKEN: ${{ secrets.PLAN_RECAP_TOKEN }}
+          PLAN_RECAP_APP_URL: ${{ secrets.PLAN_RECAP_APP_URL || inputs['plan-url'] }}
         run: |
           set -uo pipefail
           ARGS=(--source recap-source.json --out recap-url.txt --repo "$GITHUB_REPOSITORY" --pr "$PR_NUMBER" --app-url "$PLAN_RECAP_APP_URL" --token "$PLAN_RECAP_TOKEN")
@@ -709,18 +712,20 @@ jobs:
           fi
 
       - name: Attach usage
-        if: steps.url.outputs.ok == 'true'
+        if: steps.decide.outputs.run == 'true' && steps.url.outputs.ok == 'true'
         continue-on-error: true
         env:
           PLAN_URL: ${{ steps.url.outputs.plan_url }}
           RECAP_AGENT: ${{ steps.decide.outputs.agent }}
+          PLAN_RECAP_TOKEN: ${{ secrets.PLAN_RECAP_TOKEN }}
+          PLAN_RECAP_APP_URL: ${{ secrets.PLAN_RECAP_APP_URL || inputs['plan-url'] }}
         run: |
           set -uo pipefail
           RESULT=claude-result.json
           if [ "$RECAP_AGENT" = "codex" ]; then RESULT=codex-events.jsonl; fi
           if [ -f "$RESULT" ]; then $RECAP_CLI recap usage --plan-url "$PLAN_URL" --agent "$RECAP_AGENT" --result-file "$RESULT" --model "${VISUAL_RECAP_MODEL:-}" --app-url "$PLAN_RECAP_APP_URL" --token "$PLAN_RECAP_TOKEN" || true; fi
       - name: Cache Playwright browsers
-        if: steps.url.outputs.ok == 'true'
+        if: steps.decide.outputs.run == 'true' && steps.url.outputs.ok == 'true'
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           path: ~/.cache/ms-playwright
@@ -728,10 +733,12 @@ jobs:
 
       - name: Screenshot + upload
         id: shot
-        if: steps.url.outputs.ok == 'true'
+        if: steps.decide.outputs.run == 'true' && steps.url.outputs.ok == 'true'
         continue-on-error: true
         env:
           PLAN_URL: ${{ steps.url.outputs.plan_url }}
+          PLAN_RECAP_TOKEN: ${{ secrets.PLAN_RECAP_TOKEN }}
+          PLAN_RECAP_APP_URL: ${{ secrets.PLAN_RECAP_APP_URL || inputs['plan-url'] }}
         run: |
           set -uo pipefail
           if [ -n "${RECAP_PLAYWRIGHT:-}" ] && [ -x "$RECAP_PLAYWRIGHT" ]; then
@@ -778,7 +785,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           if [ -f recap.png ] || [ -f recap-dark.png ]; then echo "captured=true" >> "$GITHUB_OUTPUT"; else echo "captured=false" >> "$GITHUB_OUTPUT"; fi
       - name: Upload recap screenshot artifact
-        if: steps.shot.outputs.captured == 'true'
+        if: steps.decide.outputs.run == 'true' && steps.shot.outputs.captured == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: pr-visual-recap-${{ github.event.pull_request.number }}
@@ -789,7 +796,7 @@ jobs:
           retention-days: 14
 
       - name: Upload recap source artifact
-        if: always() && !cancelled()
+        if: always() && !cancelled() && steps.decide.outputs.run == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           # recap-source.json + the agent transcript (claude-result.json /
@@ -809,9 +816,10 @@ jobs:
           retention-days: 14
 
       - name: Upsert sticky comment
-        if: always() && !cancelled()
+        if: always() && !cancelled() && steps.decide.outputs.run == 'true'
         continue-on-error: true
         env:
+          GH_TOKEN: ${{ github.token }}
           PLAN_URL: ${{ steps.url.outputs.plan_url }}
           RECAP_IMAGE_URL: ${{ steps.shot.outputs.image_url }}
           RECAP_LIGHT_IMAGE_URL: ${{ steps.shot.outputs.light_image_url }}
