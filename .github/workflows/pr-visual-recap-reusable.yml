@@ -83,6 +83,8 @@ on:
       # Required when agent=codex; ignored otherwise.
       OPENAI_API_KEY:
         required: false
+      OPENAI_BASE_URL:
+        required: false
       # Override only when self-hosting the Plan app at a non-default origin.
       # Must match the plan-url input origin.
       PLAN_RECAP_APP_URL:
@@ -515,10 +517,26 @@ jobs:
         continue-on-error: true
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
         run: |
           set -uo pipefail
-          printenv OPENAI_API_KEY | npx -y @openai/codex@0 login --with-api-key || true
-          CODEX_ARGS=(exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check)
+          CODEX_HOME="${RUNNER_TEMP}/codex-home"
+          mkdir -p "$CODEX_HOME"
+          export CODEX_HOME
+          if [ -n "${OPENAI_BASE_URL:-}" ]; then
+            cat > "$CODEX_HOME/config.toml" <<EOF
+model_provider = "litellm"
+[model_providers.litellm]
+name = "LiteLLM"
+base_url = "${OPENAI_BASE_URL%/}"
+env_key = "OPENAI_API_KEY"
+wire_api = "responses"
+EOF
+            CODEX_ARGS=(exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check --config model_provider="litellm")
+          else
+            printenv OPENAI_API_KEY | npx -y @openai/codex@0 login --with-api-key || true
+            CODEX_ARGS=(exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check)
+          fi
           if [ -n "${VISUAL_RECAP_MODEL:-}" ]; then CODEX_ARGS+=(--model "$VISUAL_RECAP_MODEL"); fi
           case "${VISUAL_RECAP_REASONING:-}" in
             none|minimal|low|medium|high|xhigh)
@@ -641,15 +659,9 @@ jobs:
           RECAP_PUBLISH_REASON: ${{ steps.publish.outputs.reason }}
         run: |
           set -uo pipefail
-          if [ -n "${RECAP_BLOCK_REFERENCE_SUMMARY:-}" ]; then
-            {
-              echo 'summary<<__RECAP_BLOCK_REFERENCE_SUMMARY_EOF__'
-              echo "$RECAP_BLOCK_REFERENCE_SUMMARY"
-              echo '__RECAP_BLOCK_REFERENCE_SUMMARY_EOF__'
-            } >> "$GITHUB_OUTPUT"
-            node -e 'process.stdout.write(JSON.stringify({ ok: true, summary: process.env.RECAP_BLOCK_REFERENCE_SUMMARY || "" }) + "\n")'
-            exit 0
-          fi
+          # Prefer terminal publish/agent failures over earlier block-reference diagnostics.
+          # A block-reference warning may be non-fatal because the workflow can fall back to
+          # bundled blocks; returning it first hides the real failure in the sticky comment/check.
           if [ -n "${RECAP_PUBLISH_REASON:-}" ]; then
             {
               echo 'summary<<__RECAP_PUBLISH_SUMMARY_EOF__'
@@ -667,7 +679,19 @@ jobs:
             STDERR=codex-stderr.log
             EXIT_CODE=codex-exit-code.txt
           fi
-          $RECAP_CLI recap agent-summary --agent "$RECAP_AGENT" --result-file "$RESULT" --stderr-file "$STDERR" --exit-code-file "$EXIT_CODE" || true
+          if [ -s "$STDERR" ] || [ -s "$RESULT" ] || [ -s "$EXIT_CODE" ]; then
+            $RECAP_CLI recap agent-summary --agent "$RECAP_AGENT" --result-file "$RESULT" --stderr-file "$STDERR" --exit-code-file "$EXIT_CODE" || true
+            exit 0
+          fi
+          if [ -n "${RECAP_BLOCK_REFERENCE_SUMMARY:-}" ]; then
+            {
+              echo 'summary<<__RECAP_BLOCK_REFERENCE_SUMMARY_EOF__'
+              echo "$RECAP_BLOCK_REFERENCE_SUMMARY"
+              echo '__RECAP_BLOCK_REFERENCE_SUMMARY_EOF__'
+            } >> "$GITHUB_OUTPUT"
+            node -e 'process.stdout.write(JSON.stringify({ ok: true, summary: process.env.RECAP_BLOCK_REFERENCE_SUMMARY || "" }) + "\n")'
+            exit 0
+          fi
 
       - name: Attach usage
         if: steps.url.outputs.ok == 'true'
