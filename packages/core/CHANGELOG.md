@@ -1,5 +1,210 @@
 # @agent-native/core
 
+## 0.85.3
+
+### Patch Changes
+
+- c213eb8: Allow durable background agent runs to wait longer between real progress events before checkpointing, so large hosted tool generations can use the background-function budget instead of retrying every few minutes.
+
+## 0.85.2
+
+### Patch Changes
+
+- b4c0b9d: Keep chat retry clear events from extending durable no-progress windows.
+
+## 0.85.1
+
+### Patch Changes
+
+- c67d671: Keep background chat continuation rows terminal and preserve Design edit recovery guidance across retries.
+
+## 0.85.0
+
+### Minor Changes
+
+- b68e4f7: Session replay now captures browser console logs and network request metadata while recording, emitted as tagged rrweb custom events (`agent-native.console` / `agent-native.network`). Capture is on by default when session replay is enabled and configurable via new `console` / `network` options (boolean or object) on the session replay config. Request/response bodies and headers are never captured, URLs are scrubbed, messages are truncated, recorder self-traffic is excluded, and per-session budgets (1000 console / 2000 network events) add a truncation notice.
+
+### Patch Changes
+
+- b68e4f7: Show a clearer chat recovery message when a model provider returns a bare 401 response.
+- b68e4f7: Retry internal chat continuations when the server briefly reports the same completed run as active.
+- b68e4f7: Make durable background chat runs reliable end-to-end: continuation handoffs are now transactional (the successor run row is inserted before dispatch, the dispatch response is fully awaited with retries instead of racing a 250ms settle timer from a finishing Lambda, and a lost handoff is reaped into a loud error by a new unclaimed-run sweep instead of hanging silently); background dispatch bodies stay under Netlify's 256KB background-function cap by persisting the chat payload on the run row and rehydrating it in the worker; a run-manager-level no-progress backstop covers stall segments the in-loop watchdogs never see; and a durable SQL per-turn run budget bounds pathological continuation loops across every recovery path.
+- b68e4f7: Keep the Extensions sidebar create button hidden until the section is hovered or focused.
+- b68e4f7: Add hosted runtime diagnostics, schema health probes, and server response status telemetry.
+
+## 0.84.67
+
+### Patch Changes
+
+- 171f6e6: Remove app document CSP headers so hosted Google Tag Manager and framework inline bootstrap scripts are not blocked or reported by a shared policy.
+
+## 0.84.66
+
+### Patch Changes
+
+- 70a6085: Keep hosted chat runs inside the active worker when a progress-aware action-preparation checkpoint asks to continue, instead of depending on the browser to start the recovery turn.
+
+## 0.84.65
+
+### Patch Changes
+
+- d569c7a: Retry internal chat continuations when the server briefly reports the same completed run as active.
+
+## 0.84.64
+
+### Patch Changes
+
+- 70e18ac: Recover agent runs when a model stream stays open with keepalives but stops producing text, tool input, or tool calls.
+
+## 0.84.63
+
+### Patch Changes
+
+- 231460f: Recover action preparation stalls even when the model stream goes silent before sending any tool input bytes.
+
+## 0.84.62
+
+### Patch Changes
+
+- b9cac68: Mark interrupted activity-only tool cards as errors so stopped agent actions do not appear successful.
+
+## 0.84.61
+
+### Patch Changes
+
+- 3a66817: Recover share access lookups when a hosted database is missing newer additive resource columns, and prefer Netlify unpooled database URLs for migrations.
+
+## 0.84.60
+
+### Patch Changes
+
+- 4b6ca6c: Loosen the document script CSP allowances so hosted Google Tag Manager scripts and framework inline bootstrap scripts do not trigger CSP violations.
+
+## 0.84.59
+
+### Patch Changes
+
+- 13379f1: Fix empty responses from non-Anthropic models (GPT-5.x, Gemini) on the Builder
+  gateway. Action tool schemas generated from `z.record(...)` emitted a
+  `propertyNames` JSON Schema keyword that OpenAI's function-calling validator
+  rejects with `400 invalid_function_parameters`, producing an empty assistant
+  turn. Tool schemas now strip `propertyNames` so they stay portable across
+  providers (Anthropic already ignored it).
+
+## 0.84.58
+
+### Patch Changes
+
+- cdc9033: Recover durable background chat runs when action input preparation stops making byte progress, and avoid duplicate tool cards when reconnects replay completed tool events.
+- cdc9033: Remove the shadow from agent chat context scope pills.
+- cdc9033: Prevent agent chat sidebars from jittering around nested scroll areas and suppress replayed reconnect tool cards that are already rendered in the saved thread.
+
+## 0.84.57
+
+### Patch Changes
+
+- 5250e7f: Document temporary agent links for session replays and private clips.
+
+## 0.84.56
+
+### Patch Changes
+
+- a0615f8: Make PR visual recap screenshots link directly to the interactive recap and publish source-author metadata for recap comments.
+
+## 0.84.55
+
+### Patch Changes
+
+- ea97dc1: Make agent chat setup, auth, and title state resilient to transient status checks and hidden context payloads.
+
+## 0.84.54
+
+### Patch Changes
+
+- a259f96: Keep centered chat composers stable when the Connect AI setup card appears.
+- df3fcfd: Allow wireframe and diagram blocks to opt in or out of their outer visual frame.
+
+## 0.84.53
+
+### Patch Changes
+
+- 899ebf1: Hide the diff "Show all lines" footer when annotation anchoring already renders every line.
+- c1e18fb: Make session replay uploads retry failed batches without advancing sequence ids.
+
+## 0.84.52
+
+### Patch Changes
+
+- ca38cc7: Carry action-preparation stall detection across reconnect reads for the same run so zero-byte tool input retries cannot keep background chats alive indefinitely.
+- 899ebf1: Hide the diff "Show all lines" footer when annotation anchoring already renders every line.
+- c1e18fb: Make session replay uploads retry failed batches without advancing sequence ids.
+
+## 0.84.51
+
+### Patch Changes
+
+- 55e4678: Recover durable background chat runs when action input preparation stops making byte progress, and avoid duplicate tool cards when reconnects replay completed tool events.
+
+## 0.84.50
+
+### Patch Changes
+
+- 24a6bd2: Retry agent chat startup timeouts before showing an error when no run stream starts.
+
+## 0.84.49
+
+### Patch Changes
+
+- 5b96985: Recover agent runs that keep restarting empty tool input preparation without streaming action arguments.
+
+## 0.84.48
+
+### Patch Changes
+
+- f99bea8: Recover long-running agent turns that repeatedly prepare zero-byte tool inputs.
+
+## 0.84.47
+
+### Patch Changes
+
+- a234670: Keep explicit `nextRequiredAction` tool-result guidance visible in automatic continuation prompts even when the full tool result is too large to include.
+
+## 0.84.46
+
+### Patch Changes
+
+- e7eacaa: Recover stalled action preparation when a provider emits a zero-byte tool input delta without a start event.
+
+## 0.84.45
+
+### Patch Changes
+
+- a4f9e3e: Keep action preparation stall detection active after prepared tool-call snapshots until the tool actually starts.
+
+## 0.84.44
+
+### Patch Changes
+
+- 79726e5: Keep action preparation stall detection active across assistant text snapshots so hosted runs recover from zero-byte tool prep.
+
+## 0.84.43
+
+### Patch Changes
+
+- 7fe87d0: Keep tracking action-input preparation stalls across empty assistant snapshots so hosted runs recover from silent zero-byte tool prep.
+
+## 0.84.42
+
+### Patch Changes
+
+- f24d6d4: Recover durable background agent runs that repeatedly restart the same action input without streaming any bytes.
+
+## 0.84.41
+
+### Patch Changes
+
+- a8548bc: Continue durable background runs when a chunk completes tool calls without final assistant text.
+
 ## 0.84.40
 
 ### Patch Changes

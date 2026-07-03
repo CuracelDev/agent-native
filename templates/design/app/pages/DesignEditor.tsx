@@ -120,6 +120,7 @@ import {
   IconTerminal2,
   IconLink,
   IconLock,
+  IconPuzzle,
 } from "@tabler/icons-react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -170,6 +171,7 @@ import {
   EditPanel,
   type InspectCodeData,
   type InspectorTab,
+  type ScreenGeometrySelection,
 } from "@/components/design/EditPanel";
 import type { ExportSettingsValue } from "@/components/design/inspector";
 import { InspectorAiActions } from "@/components/design/inspector/InspectorAiActions";
@@ -188,6 +190,7 @@ import {
   type MotionDockTrack,
 } from "@/components/design/MotionDock";
 import {
+  getInitialFrameGeometry,
   MultiScreenCanvas,
   OVERVIEW_FRAME_WIDTH,
   type CanvasLayerMarqueeSelection,
@@ -261,6 +264,7 @@ import { useAgentGenerating } from "@/hooks/use-agent-generating";
 import { useDesignSystems } from "@/hooks/use-design-systems";
 import {
   designEditorCommandKey,
+  designSelectionStateKeysForTab,
   type DesignEditorCommand,
 } from "@/hooks/use-navigation-state";
 import { useQuestionFlow } from "@/hooks/use-question-flow";
@@ -294,10 +298,7 @@ const TAB_ID = generateTabId();
 // overwrite this tab's selection context. The global key is mirrored as a
 // fallback for CLI/external agents that do not send a browser tab id.
 function designSelectionStateKeys(): string[] {
-  const tabId = getBrowserTabId();
-  return tabId
-    ? [`design-selection:${tabId}`, "design-selection"]
-    : ["design-selection"];
+  return designSelectionStateKeysForTab(getBrowserTabId());
 }
 // Stable symbol used as the Yjs transaction origin for all local user edits.
 // The UndoManager tracks only this origin so remote peers' and the agent's
@@ -435,6 +436,47 @@ export function getSelectedScreenIdsForEditorState(args: {
   return activeFileId ? [activeFileId] : [];
 }
 
+export function getSelectedScreenGeometryForInspector(args: {
+  selectedInspectorElementCount: number;
+  selectedScreenIds: string[];
+  overviewScreens: Array<{
+    id: string;
+    filename: string;
+    title?: string;
+    width?: number;
+    height?: number;
+  }>;
+  canvasFrameGeometryById: CanvasFrameGeometryById;
+}): ScreenGeometrySelection | null {
+  if (args.selectedInspectorElementCount > 0) return null;
+  if (args.selectedScreenIds.length !== 1) return null;
+  const screenId = args.selectedScreenIds[0];
+  if (!screenId) return null;
+  const screenIndex = args.overviewScreens.findIndex(
+    (screen) => screen.id === screenId,
+  );
+  if (screenIndex < 0) return null;
+  const screen = args.overviewScreens[screenIndex];
+  if (!screen) return null;
+  const fallbackGeometry = getInitialFrameGeometry(screenIndex, {
+    width: screen.width ?? 1280,
+    height: screen.height ?? 2560,
+  });
+  const persistedGeometry = args.canvasFrameGeometryById[screenId] ?? {};
+  const geometry = {
+    ...fallbackGeometry,
+    ...persistedGeometry,
+  };
+  return {
+    id: screen.id,
+    title: screen.title ?? prettyScreenName(screen.filename),
+    x: geometry.x,
+    y: geometry.y,
+    width: geometry.width,
+    height: geometry.height,
+  };
+}
+
 function fileIdFromLayerSelectionId(
   layerId: string,
   fileIds: Set<string>,
@@ -567,9 +609,13 @@ export function getDesignEditorStateUrlSearch(args: {
   zoom?: number | null;
 }) {
   const params = new URLSearchParams(args.currentSearch);
+  const leftPanel =
+    args.leftPanel === "code" && !SHOW_DESIGN_CODE_LEFT_PANEL
+      ? null
+      : args.leftPanel;
   params.set("view", args.viewMode);
-  if (args.leftPanel && args.leftPanel !== "file") {
-    params.set("panel", args.leftPanel);
+  if (leftPanel && leftPanel !== "file") {
+    params.set("panel", leftPanel);
   } else {
     params.delete("panel");
   }
@@ -578,12 +624,12 @@ export function getDesignEditorStateUrlSearch(args: {
   } else {
     params.delete("screen");
   }
-  if (args.leftPanel === "code" && args.codeFileId) {
+  if (leftPanel === "code" && args.codeFileId) {
     params.set("fileId", args.codeFileId);
   } else {
     params.delete("fileId");
   }
-  if (args.leftPanel === "code" && !args.codeFileId && args.codeFilename) {
+  if (leftPanel === "code" && !args.codeFileId && args.codeFilename) {
     params.set("filename", args.codeFilename);
   } else {
     params.delete("filename");
@@ -1719,12 +1765,10 @@ function designEditorCommandFromSearchParams(
   if (editorView === "overview" || editorView === "single") {
     command.editorView = editorView;
   }
-  if (
-    inspector === "design" ||
-    inspector === "tweaks" ||
-    inspector === "extensions"
-  ) {
+  if (inspector === "design" || inspector === "tweaks") {
     command.inspectorTab = inspector;
+  } else if (inspector === "extensions") {
+    command.leftPanel = "tools";
   }
   if (leftPanel) command.leftPanel = leftPanel;
   if (screen) command.screen = screen;
@@ -3530,6 +3574,8 @@ type DesignLeftPanel =
   | "import"
   | "code";
 
+const SHOW_DESIGN_CODE_LEFT_PANEL = false;
+
 const CodeWorkbenchHost = lazy(() =>
   import("@/components/design/CodeWorkbenchHost").then((module) => ({
     default: module.CodeWorkbenchHost,
@@ -3547,13 +3593,15 @@ const INITIAL_GENERATION_DISABLED_LEFT_PANELS = new Set<DesignLeftPanel>([
 
 function normalizeDesignLeftPanel(value: unknown): DesignLeftPanel | undefined {
   if (value === "extensions") return "tools";
+  if (value === "code") {
+    return SHOW_DESIGN_CODE_LEFT_PANEL ? "code" : undefined;
+  }
   return value === "file" ||
     value === "agent" ||
     value === "assets" ||
     value === "tools" ||
     value === "tokens" ||
-    value === "import" ||
-    value === "code"
+    value === "import"
     ? value
     : undefined;
 }
@@ -3605,19 +3653,23 @@ function DesignWorkspaceRail({
     {
       panel: "tools",
       label: t("designEditor.leftRail.tools"),
-      icon: <IconTerminal2 className="size-[15px]" />,
+      icon: <IconPuzzle className="size-[15px]" />,
     },
     {
       panel: "tokens",
       label: t("designEditor.leftRail.tokens"),
       icon: <IconAssembly className="size-[15px]" />,
     },
-    {
-      panel: "code",
-      label: "Code" /* i18n-ignore */,
-      icon: <IconCode className="size-[15px]" />,
-      separatorBefore: true,
-    },
+    ...(SHOW_DESIGN_CODE_LEFT_PANEL
+      ? [
+          {
+            panel: "code" as const,
+            label: "Code" /* i18n-ignore */,
+            icon: <IconCode className="size-[15px]" />,
+            separatorBefore: true,
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -4790,6 +4842,7 @@ export default function DesignEditor() {
   const [motionDockOpen, setMotionDockOpen] = useState(false);
   const [motionDockMounted, setMotionDockMounted] = useState(false);
   const motionDockUnmountTimerRef = useRef<number | null>(null);
+  const motionDockOpenAnimationFrameRef = useRef<number | null>(null);
   const [motionTimelineId, setMotionTimelineId] = useState<string | null>(null);
   const [motionTracks, setMotionTracks] = useState<MotionDockTrack[]>([]);
   const [motionDurationMs, setMotionDurationMs] = useState(1000);
@@ -4811,6 +4864,16 @@ export default function DesignEditor() {
     window.clearTimeout(motionDockUnmountTimerRef.current);
     motionDockUnmountTimerRef.current = null;
   }, []);
+  const clearMotionDockOpenAnimationFrame = useCallback(() => {
+    if (
+      typeof window === "undefined" ||
+      motionDockOpenAnimationFrameRef.current === null
+    ) {
+      return;
+    }
+    window.cancelAnimationFrame(motionDockOpenAnimationFrameRef.current);
+    motionDockOpenAnimationFrameRef.current = null;
+  }, []);
   const clearMotionAutosaveTimer = useCallback(() => {
     if (motionAutosaveTimerRef.current === null) return;
     window.clearTimeout(motionAutosaveTimerRef.current);
@@ -4819,13 +4882,22 @@ export default function DesignEditor() {
   const setMotionDockOpenAnimated = useCallback(
     (open: boolean) => {
       clearMotionDockUnmountTimer();
+      clearMotionDockOpenAnimationFrame();
       if (open) {
         setMotionDockMounted(true);
         if (typeof window === "undefined") {
           setMotionDockOpen(true);
           return;
         }
-        window.requestAnimationFrame(() => setMotionDockOpen(true));
+        motionDockOpenAnimationFrameRef.current = window.requestAnimationFrame(
+          () => {
+            motionDockOpenAnimationFrameRef.current =
+              window.requestAnimationFrame(() => {
+                setMotionDockOpen(true);
+                motionDockOpenAnimationFrameRef.current = null;
+              });
+          },
+        );
         return;
       }
 
@@ -4839,7 +4911,7 @@ export default function DesignEditor() {
         motionDockUnmountTimerRef.current = null;
       }, MOTION_DOCK_EXIT_FALLBACK_MS);
     },
-    [clearMotionDockUnmountTimer],
+    [clearMotionDockOpenAnimationFrame, clearMotionDockUnmountTimer],
   );
   const handleMotionDockExitComplete = useCallback(() => {
     if (motionDockOpen) return;
@@ -4854,8 +4926,11 @@ export default function DesignEditor() {
     }, MOTION_DOCK_EXIT_SETTLE_MS);
   }, [clearMotionDockUnmountTimer, motionDockOpen]);
   useEffect(
-    () => () => clearMotionDockUnmountTimer(),
-    [clearMotionDockUnmountTimer],
+    () => () => {
+      clearMotionDockUnmountTimer();
+      clearMotionDockOpenAnimationFrame();
+    },
+    [clearMotionDockOpenAnimationFrame, clearMotionDockUnmountTimer],
   );
   useEffect(() => () => clearMotionAutosaveTimer(), [clearMotionAutosaveTimer]);
   const [shaderFillPreview, setShaderFillPreview] = useState<{
@@ -4946,11 +5021,6 @@ export default function DesignEditor() {
   useEffect(() => {
     if (hasSelectedElement) focusDesignInspectorForSelection();
   }, [focusDesignInspectorForSelection, hasSelectedElement]);
-
-  useEffect(() => {
-    if (hasSelectedElement) return;
-    setActiveInspectorTab("tweaks");
-  }, [hasSelectedElement]);
 
   const startSidebarResize = useCallback(
     (side: "left" | "right", event: ReactPointerEvent<HTMLDivElement>) => {
@@ -6655,13 +6725,9 @@ export default function DesignEditor() {
       if (target && !targetFile) return false;
 
       const inspectorTab =
-        command.inspectorTab === "design" ||
-        command.inspectorTab === "tweaks" ||
-        command.inspectorTab === "extensions"
+        command.inspectorTab === "design" || command.inspectorTab === "tweaks"
           ? command.inspectorTab
-          : command.inspector === "design" ||
-              command.inspector === "tweaks" ||
-              command.inspector === "extensions"
+          : command.inspector === "design" || command.inspector === "tweaks"
             ? command.inspector
             : undefined;
       if (inspectorTab) setActiveInspectorTab(inspectorTab);
@@ -8047,13 +8113,6 @@ export default function DesignEditor() {
     selectedElement?.sourceId,
   ]);
   useEffect(() => {
-    const urlParams = new URLSearchParams(location.search);
-    const urlKeepsExtensionsInspector =
-      urlParams.get("inspector") === "extensions" ||
-      urlParams.get("inspectorTab") === "extensions";
-    if (activeInspectorTab === "extensions" && urlKeepsExtensionsInspector) {
-      return;
-    }
     clearShaderFillPreview();
   }, [
     activeInspectorTab,
@@ -14615,6 +14674,19 @@ ${serializedHtml}
           : [],
     [selectedElement, selectedLayerTargets],
   );
+  const selectedScreenGeometry = useMemo<ScreenGeometrySelection | null>(() => {
+    return getSelectedScreenGeometryForInspector({
+      selectedInspectorElementCount: selectedInspectorElements.length,
+      selectedScreenIds,
+      overviewScreens,
+      canvasFrameGeometryById,
+    });
+  }, [
+    canvasFrameGeometryById,
+    overviewScreens,
+    selectedInspectorElements.length,
+    selectedScreenIds,
+  ]);
 
   const layerPanelSelectedIds = useMemo(
     () =>
@@ -16993,19 +17065,12 @@ ${serializedHtml}
                 )}
               >
                 {id && canEditDesign ? (
-                  <>
-                    <div className="flex min-h-8 shrink-0 items-center border-b border-border/60 px-3">
-                      <h3 className="min-w-0 flex-1 truncate text-xs font-semibold text-foreground">
-                        {t("designEditor.tokens.title")}
-                      </h3>
-                    </div>
-                    <div className="design-inspector-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain">
-                      <TokensPanel
-                        designId={id}
-                        onTokensApplied={handleTokensApplied}
-                      />
-                    </div>
-                  </>
+                  <div className="design-inspector-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain">
+                    <TokensPanel
+                      designId={id}
+                      onTokensApplied={handleTokensApplied}
+                    />
+                  </div>
                 ) : (
                   <ReadOnlyEditorPanel
                     title={"Tokens require editor access" /* i18n-ignore */}
@@ -17925,6 +17990,7 @@ ${serializedHtml}
                 <EditPanel
                   selectedElement={selectedElement}
                   selectedElements={selectedInspectorElements}
+                  selectedScreenGeometry={selectedScreenGeometry}
                   pageStyles={pageStyles}
                   zoom={zoom}
                   headerTrailing={renderZoomControl("inspector")}
@@ -17945,13 +18011,6 @@ ${serializedHtml}
                     })
                   }
                   onRequestTweaks={handleRequestTweaks}
-                  extensionsPanel={
-                    <DesignExtensionsPanel
-                      context={designExtensionContext}
-                      hideAssetLibrary
-                      title={t("designEditor.extensions")}
-                    />
-                  }
                   onStyleChange={handleStyleChange}
                   onStylesChange={handleStylesChange}
                   onExport={handleInspectorExport}

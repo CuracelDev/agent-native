@@ -105,6 +105,43 @@ export const BACKGROUND_SOFT_TIMEOUT_CEILING_MS = 13 * 60_000; // 780_000
 export const DEFAULT_BACKGROUND_RUN_SOFT_TIMEOUT_MS =
   BACKGROUND_SOFT_TIMEOUT_CEILING_MS;
 
+/**
+ * Default no-progress window for a run executing inside a proven durable
+ * background function. Keep this below the 13-minute soft timeout so a truly
+ * wedged background turn can still checkpoint, persist, and continue before
+ * the function budget expires, but far above the foreground 150s window so
+ * large Design/Plan/Assets generations are not chopped up while the model is
+ * legitimately planning a big tool payload.
+ */
+export const DEFAULT_BACKGROUND_NO_PROGRESS_TIMEOUT_MS =
+  BACKGROUND_SOFT_TIMEOUT_CEILING_MS - 60_000;
+
+/**
+ * AUTHORITATIVE no-progress backstop for a run, enforced by the run manager
+ * itself (timer-driven, independent of any layer below).
+ *
+ * The finer-grained watchdogs inside the agent loop (model-stream and
+ * action-preparation no-progress, both 90s) only guard the model event stream
+ * — a stall in any segment OUTSIDE that guarded loop (engine-call
+ * establishment, worker setup between continuation chunks, a wedged transport
+ * that emits keepalives while the loop never runs) previously hung forever
+ * with the client watching keepalives. This backstop covers every segment by
+ * construction: if no REAL progress event (see `shouldBumpProgressForEvent`;
+ * keepalives and zero-byte prep activity don't count) lands for this long —
+ * and no tool call is in flight (tool execution legitimately emits nothing
+ * for minutes and has its own 12-min timeout) — the run manager emits
+ * `auto_continue { reason: "no_progress" }` and aborts the chunk, exactly
+ * like the soft timeout, so the normal continuation machinery recovers it.
+ *
+ * Sits above the 90s in-loop watchdogs (they get first chance to recover with
+ * better context). Foreground hosted chunks keep this short so the user sees
+ * recovery promptly; proven durable-background chunks use
+ * `DEFAULT_BACKGROUND_NO_PROGRESS_TIMEOUT_MS` so large outputs can use the
+ * background budget. Only armed when a soft-timeout regime is active (hosted
+ * runs); local dev stays unbounded.
+ */
+export const RUN_NO_PROGRESS_HARD_TIMEOUT_MS = 150_000;
+
 /** Default SQL retention for completed run event logs (24 hours). */
 export const DEFAULT_COMPLETED_RUN_RETENTION_MS = 24 * 60 * 60 * 1000;
 
@@ -220,6 +257,13 @@ export interface StartRunOptions {
    * decision in production-agent.ts.
    */
   backgroundFunction?: boolean;
+  /**
+   * Override the run-manager-level no-progress backstop
+   * (`RUN_NO_PROGRESS_HARD_TIMEOUT_MS`). `0` disables it. Defaults to the
+   * backstop constant whenever a soft-timeout regime is active (hosted runs)
+   * and to disabled otherwise (local dev stays unbounded).
+   */
+  noProgressTimeoutMs?: number;
 }
 
 export interface ResolveRunSoftTimeoutOptions {
@@ -455,6 +499,8 @@ export function startRun(
   // so 1s resolution is plenty.
   let lastProgressBumpAt = 0;
   const preparingActivityBytes = new Map<string, number>();
+  const preparingActivityTools = new Map<string, string>();
+  const preparingActivityRestartHighWater = new Map<string, number>();
   let eventPersistenceErrorCaptured = false;
   const bumpProgressIfDue = () => {
     const now = Date.now();
@@ -464,9 +510,21 @@ export function startRun(
   };
   const shouldBumpProgressForEvent = (event: AgentChatEvent): boolean => {
     if (event.type === "stream_keepalive") return false;
+    if (event.type === "clear") {
+      for (const [key, bytes] of preparingActivityBytes) {
+        const toolKey = preparingActivityTools.get(key) ?? key;
+        preparingActivityRestartHighWater.set(
+          toolKey,
+          Math.max(preparingActivityRestartHighWater.get(toolKey) ?? 0, bytes),
+        );
+      }
+      preparingActivityBytes.clear();
+      preparingActivityTools.clear();
+      return false;
+    }
     if (event.type === "activity" && isPreparingActionActivityEvent(event)) {
-      const toolKey =
-        event.id?.trim() || event.tool?.trim() || event.label.trim();
+      const toolKey = event.tool?.trim() || event.label.trim();
+      const activityKey = `${toolKey}:${event.id?.trim() || "no-id"}`;
       const progressBytes =
         typeof event.progressBytes === "number" &&
         Number.isFinite(event.progressBytes) &&
@@ -474,29 +532,99 @@ export function startRun(
           ? Math.floor(event.progressBytes)
           : undefined;
       if (progressBytes === undefined) return false;
-      if (!event.id?.trim()) return progressBytes > 0;
-      const previousBytes = preparingActivityBytes.get(toolKey) ?? 0;
-      if (progressBytes <= previousBytes) {
+      const restartHighWater =
+        preparingActivityRestartHighWater.get(toolKey) ?? 0;
+      if (!event.id?.trim()) {
+        if (progressBytes <= restartHighWater) return false;
+        preparingActivityTools.set(activityKey, toolKey);
         preparingActivityBytes.set(
-          toolKey,
+          activityKey,
+          Math.max(preparingActivityBytes.get(activityKey) ?? 0, progressBytes),
+        );
+        if (preparingActivityRestartHighWater.has(toolKey)) {
+          preparingActivityRestartHighWater.set(
+            toolKey,
+            Math.max(restartHighWater, progressBytes),
+          );
+        }
+        return progressBytes > 0;
+      }
+      const previousBytes = Math.max(
+        preparingActivityBytes.get(activityKey) ?? 0,
+        restartHighWater,
+      );
+      if (progressBytes <= previousBytes) {
+        preparingActivityTools.set(activityKey, toolKey);
+        preparingActivityBytes.set(
+          activityKey,
           Math.max(previousBytes, progressBytes),
         );
         return false;
       }
-      preparingActivityBytes.set(toolKey, progressBytes);
+      preparingActivityTools.set(activityKey, toolKey);
+      preparingActivityBytes.set(activityKey, progressBytes);
+      if (preparingActivityRestartHighWater.has(toolKey)) {
+        preparingActivityRestartHighWater.set(
+          toolKey,
+          Math.max(
+            preparingActivityRestartHighWater.get(toolKey) ?? 0,
+            progressBytes,
+          ),
+        );
+      }
       return true;
     }
     if (event.type === "tool_start" || event.type === "tool_done") {
       preparingActivityBytes.clear();
+      preparingActivityTools.clear();
+      preparingActivityRestartHighWater.clear();
     }
-    if (
-      event.type === "clear" ||
-      event.type === "done" ||
-      event.type === "error"
-    ) {
+    if (event.type === "done" || event.type === "error") {
       preparingActivityBytes.clear();
+      preparingActivityTools.clear();
+      preparingActivityRestartHighWater.clear();
     }
     return true;
+  };
+
+  // ── No-progress backstop (see RUN_NO_PROGRESS_HARD_TIMEOUT_MS) ──────────
+  // Timer-driven and independent of the agent loop, so it fires even when the
+  // stall is in a segment the in-loop watchdogs never see (engine-call
+  // establishment, setup, a wedged transport emitting keepalives). Tool calls
+  // and sub-agent calls in flight suspend it — tool execution legitimately
+  // emits nothing for minutes and carries its own 12-min timeout.
+  let lastRealProgressAt = Date.now();
+  let inFlightWorkCount = 0;
+  const trackInFlightWork = (event: AgentChatEvent) => {
+    if (event.type === "tool_start") {
+      inFlightWorkCount += 1;
+    } else if (event.type === "tool_done") {
+      inFlightWorkCount = Math.max(0, inFlightWorkCount - 1);
+    } else if (event.type === "agent_call") {
+      if (event.status === "start") {
+        inFlightWorkCount += 1;
+      } else {
+        inFlightWorkCount = Math.max(0, inFlightWorkCount - 1);
+      }
+    }
+  };
+  const checkNoProgressBackstop = () => {
+    if (noProgressTimeoutMs <= 0) return;
+    if (run.status !== "running" || abort.signal.aborted) return;
+    if (inFlightWorkCount > 0) return;
+    if (Date.now() - lastRealProgressAt < noProgressTimeoutMs) return;
+    console.error(
+      `[run-manager] no real progress for ${noProgressTimeoutMs}ms with no tool in flight — ` +
+        `checkpointing run for continuation`,
+      runId,
+    );
+    // Mirror the soft-timeout semantics exactly: the chunk completes (not
+    // aborts) at an auto_continue boundary, so the continuation machinery —
+    // server-chained for background workers, client-driven for foreground —
+    // recovers the turn.
+    softTimedOut = true;
+    send({ type: "auto_continue", reason: "no_progress" });
+    abort.abort("no_progress");
   };
 
   // Periodic SQL abort check interval (for cross-isolate abort on Workers).
@@ -534,11 +662,22 @@ export function startRun(
   const heartbeatTimer: ReturnType<typeof setInterval> = setInterval(() => {
     updateRunHeartbeat(runId).catch(() => {});
     checkSqlAbort();
+    checkNoProgressBackstop();
   }, 1500);
   const softTimeoutMs = resolveRunSoftTimeoutMs(options?.softTimeoutMs, {
     useHostedDefault: options?.useHostedSoftTimeoutDefault === true,
     backgroundFunction: options?.backgroundFunction === true,
   });
+  // Armed only when a soft-timeout regime is active (hosted): local dev keeps
+  // unbounded runs. For 40s foreground chunks the soft timeout always fires
+  // first, so in practice this guards the long background chunks.
+  const noProgressTimeoutMs =
+    options?.noProgressTimeoutMs ??
+    (softTimeoutMs > 0
+      ? options?.backgroundFunction === true
+        ? DEFAULT_BACKGROUND_NO_PROGRESS_TIMEOUT_MS
+        : RUN_NO_PROGRESS_HARD_TIMEOUT_MS
+      : 0);
   const softTimeoutTimer =
     softTimeoutMs > 0
       ? setTimeout(() => {
@@ -610,7 +749,9 @@ export function startRun(
     // a hung run from a healthy one. Keepalive and zero-byte action prep are
     // liveness only; streamed input bytes, text, and tool lifecycle events are
     // real progress.
+    trackInFlightWork(runEvent.event);
     if (shouldBumpProgressForEvent(runEvent.event)) {
+      lastRealProgressAt = Date.now();
       bumpProgressIfDue();
     }
 
