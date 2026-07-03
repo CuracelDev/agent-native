@@ -524,14 +524,14 @@ jobs:
           mkdir -p "$CODEX_HOME"
           export CODEX_HOME
           if [ -n "${OPENAI_BASE_URL:-}" ]; then
-            cat > "$CODEX_HOME/config.toml" <<EOF
-model_provider = "litellm"
-[model_providers.litellm]
-name = "LiteLLM"
-base_url = "${OPENAI_BASE_URL%/}"
-env_key = "OPENAI_API_KEY"
-wire_api = "responses"
-EOF
+            {
+              printf '%s\n' 'model_provider = "litellm"'
+              printf '%s\n' '[model_providers.litellm]'
+              printf '%s\n' 'name = "LiteLLM"'
+              printf 'base_url = "%s"\n' "${OPENAI_BASE_URL%/}"
+              printf '%s\n' 'env_key = "OPENAI_API_KEY"'
+              printf '%s\n' 'wire_api = "responses"'
+            } > "$CODEX_HOME/config.toml"
             CODEX_ARGS=(exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check --config model_provider="litellm")
           else
             printenv OPENAI_API_KEY | npx -y @openai/codex@0 login --with-api-key || true
