@@ -30,7 +30,7 @@ on:
         description: "Version of @agent-native/core CLI (npx @agent-native/core@<version>)"
         required: false
         type: string
-        default: "latest"
+        default: "0.85.7"
       # Coding-agent backend.  Validated in the gate; mis-cased values are
       # normalized to lowercase.
       agent:
@@ -98,17 +98,28 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  gate:
-    name: Gate
+  visual_recap:
+    name: Visual Recap
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
     permissions:
       contents: read
       issues: write
-      pull-requests: read
-    outputs:
-      run: ${{ steps.decide.outputs.run }}
-      agent: ${{ steps.decide.outputs.agent }}
+      pull-requests: write
+    env:
+      # Use the PLAN_RECAP_APP_URL secret when set (self-hosted); otherwise
+      # fall back to the plan-url input.
+      PLAN_RECAP_APP_URL: ${{ secrets.PLAN_RECAP_APP_URL || inputs['plan-url'] }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      PR_STATE: ${{ github.event.pull_request.state }}
+      PR_MERGED: ${{ github.event.pull_request.merged }}
+      PR_MERGED_AT: ${{ github.event.pull_request.merged_at }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      VISUAL_RECAP_MODEL: ${{ inputs.model }}
+      VISUAL_RECAP_REASONING: ${{ inputs.reasoning }}
+      VISUAL_RECAP_SKILL_SOURCE: ${{ inputs['skill-source'] || 'auto' }}
+      VISUAL_RECAP_SECRET_SCAN: ${{ inputs['secret-scan'] || 'high-confidence' }}
+      RECAP_CLI_VERSION: ${{ inputs['cli-version'] || '0.85.7' }}
     steps:
       - id: decide
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
@@ -119,7 +130,7 @@ jobs:
           HAS_OPENAI: ${{ secrets.OPENAI_API_KEY != '' }}
           AGENT: ${{ inputs.agent }}
           VISUAL_RECAP_MODEL: ${{ inputs.model }}
-          VISUAL_RECAP_SKILL_SOURCE: ${{ inputs.skill-source || 'auto' }}
+          VISUAL_RECAP_SKILL_SOURCE: ${{ inputs['skill-source'] || 'auto' }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         with:
           script: |
@@ -193,6 +204,7 @@ jobs:
                   per_page: 100,
                 });
                 const isSensitive = (p) =>
+                  p.startsWith('.github/workflows/') ||
                   (usesRepoSkill && /(^|\/)skills\/visual-(recap|plan|plans)\//.test(p)) ||
                   p.startsWith('.claude/') ||
                   p === 'CLAUDE.md' ||
@@ -224,7 +236,7 @@ jobs:
             if (!run && pr) {
               try {
                 const MARKER = '<!-- pr-visual-recap -->';
-                const { data: comments } = await github.rest.issues.listComments({
+                const comments = await github.paginate(github.rest.issues.listComments, {
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   issue_number: pr.number,
@@ -263,36 +275,8 @@ jobs:
               }
             }
 
-  recap:
-    name: Generate visual recap
-    needs: gate
-    if: needs.gate.outputs.run == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      actions: write
-      checks: write
-      contents: read
-      issues: write
-      pull-requests: write
-    env:
-      # Use the PLAN_RECAP_APP_URL secret when set (self-hosted); otherwise
-      # fall back to the plan-url input.
-      PLAN_RECAP_APP_URL: ${{ secrets.PLAN_RECAP_APP_URL || inputs.plan-url }}
-      PLAN_RECAP_TOKEN: ${{ secrets.PLAN_RECAP_TOKEN }}
-      GH_TOKEN: ${{ github.token }}
-      PR_NUMBER: ${{ github.event.pull_request.number }}
-      PR_STATE: ${{ github.event.pull_request.state }}
-      PR_MERGED: ${{ github.event.pull_request.merged }}
-      PR_MERGED_AT: ${{ github.event.pull_request.merged_at }}
-      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-      VISUAL_RECAP_MODEL: ${{ inputs.model }}
-      VISUAL_RECAP_REASONING: ${{ inputs.reasoning }}
-      VISUAL_RECAP_SKILL_SOURCE: ${{ inputs.skill-source || 'auto' }}
-      VISUAL_RECAP_SECRET_SCAN: ${{ inputs.secret-scan || 'high-confidence' }}
-      RECAP_CLI_VERSION: ${{ inputs.cli-version || 'latest' }}
-    steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        if: steps.decide.outputs.run == 'true'
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -305,16 +289,18 @@ jobs:
           echo "local=false" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        if: steps.decide.outputs.run == 'true'
         with:
           node-version: "22"
 
       - name: Install published recap CLI
+        if: steps.decide.outputs.run == 'true'
         run: |
           set -euo pipefail
           VERSION="$RECAP_CLI_VERSION"
-          if [ "$VERSION" = "latest" ]; then
-            VERSION="$(npm view @agent-native/core@latest version)"
-          fi
+            if [ "$VERSION" = "latest" ]; then
+              VERSION="$(npm view @agent-native/core@latest version)"
+            fi
           for attempt in 1 2 3; do
             if npm install --prefix "$RUNNER_TEMP/recap-cli" --no-audit --no-fund "@agent-native/core@$VERSION"; then
               break
@@ -325,14 +311,8 @@ jobs:
           echo "RECAP_CLI=$RUNNER_TEMP/recap-cli/node_modules/.bin/agent-native" >> "$GITHUB_ENV"
           echo "RECAP_PLAYWRIGHT=$RUNNER_TEMP/recap-cli/node_modules/.bin/playwright" >> "$GITHUB_ENV"
 
-      - name: Start visual recap check
-        id: recap_check
-        continue-on-error: true
-        run: |
-          set -uo pipefail
-          $RECAP_CLI recap check start --sha "$HEAD_SHA" --workflow-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-
       - name: Fetch pull request head
+        if: steps.decide.outputs.run == 'true'
         env:
           PR_NUMBER_ENV: ${{ github.event.pull_request.number }}
         run: |
@@ -348,19 +328,24 @@ jobs:
             echo "FATAL: fetched PR head $FETCHED_SHA != event HEAD_SHA $HEAD_SHA — aborting to avoid recapping the wrong commit"
             exit 1
           fi
-
       - name: Collect bounded diff
+        if: steps.decide.outputs.run == 'true'
         id: diff
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
-          $RECAP_CLI recap collect-diff --base "$BASE_SHA" --head refs/recap/pr-head --out recap.diff --stat recap.stat
+          DIFF_BASE="$(git merge-base "$BASE_SHA" refs/recap/pr-head 2>/dev/null || true)"
+          if [ -z "$DIFF_BASE" ]; then DIFF_BASE="$BASE_SHA"; fi
+          $RECAP_CLI recap collect-diff --base "$DIFF_BASE" --head refs/recap/pr-head --out recap.diff --stat recap.stat
 
       - name: Probe plan-app auth
         id: auth_probe
-        if: steps.diff.outputs.tiny != 'true'
+        if: steps.decide.outputs.run == 'true' && steps.diff.outputs.tiny != 'true'
         continue-on-error: true
+        env:
+          PLAN_RECAP_TOKEN: ${{ secrets.PLAN_RECAP_TOKEN }}
+          PLAN_RECAP_APP_URL: ${{ secrets.PLAN_RECAP_APP_URL || inputs['plan-url'] }}
         run: |
           set -uo pipefail
           # Hit the plan app's action surface with the publish token. A 401 means
@@ -381,8 +366,11 @@ jobs:
 
       - name: Probe plan-app route health
         id: route_health
-        if: steps.diff.outputs.tiny != 'true'
+        if: steps.decide.outputs.run == 'true' && steps.diff.outputs.tiny != 'true'
         continue-on-error: true
+        env:
+          PLAN_RECAP_TOKEN: ${{ secrets.PLAN_RECAP_TOKEN }}
+          PLAN_RECAP_APP_URL: ${{ secrets.PLAN_RECAP_APP_URL || inputs['plan-url'] }}
         run: |
           set -uo pipefail
           # Pre-publish health gate: confirm the plan app's recap action routes
@@ -411,6 +399,10 @@ jobs:
             REASON="Plan app routes return 404 — deploy not yet propagated (create-visual-recap: $CREATE_STATUS, get-plan-blocks: $BLOCKS_STATUS). The plan-app client is ahead of the deployed server; re-run once the deploy finishes propagating."
             echo "::error::$REASON"
             echo "unhealthy=true" >> "$GITHUB_OUTPUT"
+          elif [ "$CREATE_STATUS" = "0" ] || [ "$BLOCKS_STATUS" = "0" ]; then
+            REASON="Plan app routes could not be reached (create-visual-recap: $CREATE_STATUS, get-plan-blocks: $BLOCKS_STATUS). Skipping recap to avoid spending model tokens on an unpublished result."
+            echo "::warning::$REASON"
+            echo "unhealthy=true" >> "$GITHUB_OUTPUT"
           else
             echo "unhealthy=false" >> "$GITHUB_OUTPUT"
           fi
@@ -422,7 +414,7 @@ jobs:
 
       - name: Secret scan
         id: scan
-        if: steps.diff.outputs.tiny != 'true' && steps.route_health.outputs.unhealthy != 'true'
+        if: steps.decide.outputs.run == 'true' && steps.diff.outputs.tiny != 'true' && steps.auth_probe.outputs.auth_failed != 'true' && steps.route_health.outputs.unhealthy != 'true'
         run: |
           set -uo pipefail
           # Fail CLOSED: a scanner error or invalid JSON suppresses the diff.
@@ -440,8 +432,10 @@ jobs:
 
       - name: Read previous plan id
         id: prev
-        if: steps.diff.outputs.tiny != 'true' && steps.route_health.outputs.unhealthy != 'true'
+        if: steps.decide.outputs.run == 'true' && steps.diff.outputs.tiny != 'true' && steps.auth_probe.outputs.auth_failed != 'true' && steps.route_health.outputs.unhealthy != 'true'
         continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           PLAN_ID="$($RECAP_CLI recap comment find-plan-id --repo "$GITHUB_REPOSITORY" --issue "$PR_NUMBER" --token "$GH_TOKEN")"
@@ -449,8 +443,10 @@ jobs:
 
       - name: Fetch plan block reference
         id: block_reference
-        if: steps.diff.outputs.tiny != 'true' && steps.route_health.outputs.unhealthy != 'true' && steps.scan.outputs.suppressed != 'true'
+        if: steps.decide.outputs.run == 'true' && steps.diff.outputs.tiny != 'true' && steps.auth_probe.outputs.auth_failed != 'true' && steps.route_health.outputs.unhealthy != 'true' && steps.scan.outputs.suppressed != 'true'
         continue-on-error: true
+        env:
+          PLAN_RECAP_APP_URL: ${{ secrets.PLAN_RECAP_APP_URL || inputs['plan-url'] }}
         run: |
           set -uo pipefail
           if $RECAP_CLI recap block-reference --app-url "$PLAN_RECAP_APP_URL" --out recap-blocks.md; then
@@ -469,7 +465,7 @@ jobs:
 
       - name: Build recap prompt
         id: prompt
-        if: steps.diff.outputs.tiny != 'true' && steps.route_health.outputs.unhealthy != 'true' && steps.scan.outputs.suppressed != 'true'
+        if: steps.decide.outputs.run == 'true' && steps.diff.outputs.tiny != 'true' && steps.auth_probe.outputs.auth_failed != 'true' && steps.route_health.outputs.unhealthy != 'true' && steps.scan.outputs.suppressed != 'true'
         env:
           PREV_PLAN_ID: ${{ steps.prev.outputs.plan_id }}
           DIFF_HUGE: ${{ steps.diff.outputs.huge }}
@@ -481,10 +477,9 @@ jobs:
           if [ "${IS_FORK:-}" = "true" ]; then ARGS+=(--fork-pr true); fi
           if [ -n "${PREV_PLAN_ID:-}" ]; then ARGS+=(--prev-plan-id "$PREV_PLAN_ID"); fi
           $RECAP_CLI recap build-prompt "${ARGS[@]}"
-
       - name: Run agent (Claude Code)
         id: claude
-        if: needs.gate.outputs.agent == 'claude' && steps.diff.outputs.tiny != 'true' && steps.route_health.outputs.unhealthy != 'true' && steps.scan.outputs.suppressed != 'true'
+        if: steps.decide.outputs.run == 'true' && steps.decide.outputs.agent == 'claude' && steps.diff.outputs.tiny != 'true' && steps.auth_probe.outputs.auth_failed != 'true' && steps.route_health.outputs.unhealthy != 'true' && steps.scan.outputs.suppressed != 'true'
         continue-on-error: true
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -496,7 +491,7 @@ jobs:
           rm -f recap-source.json recap-url.txt recap-url-reason.txt claude-result.json claude-stderr.log
           run_claude() {
             set +e
-            npx -y @anthropic-ai/claude-code@2 "${CLAUDE_ARGS[@]}" > claude-result.json 2> claude-stderr.log
+            npx -y @anthropic-ai/claude-code@2.1.199 "${CLAUDE_ARGS[@]}" > claude-result.json 2> claude-stderr.log
             CLAUDE_STATUS="$?"
             set -e
             echo "$CLAUDE_STATUS" > claude-exit-code.txt
@@ -513,7 +508,7 @@ jobs:
 
       - name: Run agent (Codex)
         id: codex
-        if: needs.gate.outputs.agent == 'codex' && steps.diff.outputs.tiny != 'true' && steps.route_health.outputs.unhealthy != 'true' && steps.scan.outputs.suppressed != 'true'
+        if: steps.decide.outputs.run == 'true' && steps.decide.outputs.agent == 'codex' && steps.diff.outputs.tiny != 'true' && steps.auth_probe.outputs.auth_failed != 'true' && steps.route_health.outputs.unhealthy != 'true' && steps.scan.outputs.suppressed != 'true'
         continue-on-error: true
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -534,7 +529,7 @@ jobs:
             } > "$CODEX_HOME/config.toml"
             CODEX_ARGS=(exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check --config model_provider="litellm")
           else
-            printenv OPENAI_API_KEY | npx -y @openai/codex@0 login --with-api-key || true
+            printenv OPENAI_API_KEY | npx -y @openai/codex@0.142.5 login --with-api-key || true
             CODEX_ARGS=(exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check)
           fi
           if [ -n "${VISUAL_RECAP_MODEL:-}" ]; then CODEX_ARGS+=(--model "$VISUAL_RECAP_MODEL"); fi
@@ -547,7 +542,7 @@ jobs:
           rm -f recap-source.json recap-url.txt recap-url-reason.txt codex-events.jsonl codex-stderr.log
           run_codex() {
             set +e
-            npx -y @openai/codex@0 "${CODEX_ARGS[@]}" --json "$(cat recap-prompt.md)" 2> codex-stderr.log | tee codex-events.jsonl
+            npx -y @openai/codex@0.142.5 "${CODEX_ARGS[@]}" --json "$(cat recap-prompt.md)" 2> codex-stderr.log | tee codex-events.jsonl
             CODEX_STATUS="${PIPESTATUS[0]}"
             set -e
             echo "$CODEX_STATUS" > codex-exit-code.txt
@@ -563,7 +558,7 @@ jobs:
 
       - name: Publish recap source
         id: publish
-        if: steps.diff.outputs.tiny != 'true' && steps.route_health.outputs.unhealthy != 'true' && steps.scan.outputs.suppressed != 'true'
+        if: steps.decide.outputs.run == 'true' && steps.diff.outputs.tiny != 'true' && steps.auth_probe.outputs.auth_failed != 'true' && steps.route_health.outputs.unhealthy != 'true' && steps.scan.outputs.suppressed != 'true'
         continue-on-error: true
         env:
           PREV_PLAN_ID: ${{ steps.prev.outputs.plan_id }}
@@ -578,11 +573,31 @@ jobs:
             ARGS+=(--source-pr-state "$PR_STATE")
           fi
           if [ -n "${PR_MERGED_AT:-}" ]; then ARGS+=(--source-pr-merged-at "$PR_MERGED_AT"); fi
-          $RECAP_CLI recap publish "${ARGS[@]}"
-
+          set +e
+          PUBLISH_OUTPUT="$($RECAP_CLI recap publish "${ARGS[@]}" 2>&1)"
+          PUBLISH_STATUS="$?"
+          set -e
+          printf '%s\n' "$PUBLISH_OUTPUT"
+          if [ "$PUBLISH_STATUS" -ne 0 ] && printf '%s' "$PUBLISH_OUTPUT" | grep -q 'Could not parse expression with acorn' && [ -s recap-source.json ]; then
+            echo "::warning::Plan parser rejected generated MDX. Removing generated Diagram blocks and retrying publish."
+            node <<'NODE'
+            const fs = require('fs');
+            const path = 'recap-source.json';
+            const source = JSON.parse(fs.readFileSync(path, 'utf8'));
+            if (source.mdx && typeof source.mdx['plan.mdx'] === 'string') {
+              source.mdx['plan.mdx'] = source.mdx['plan.mdx'].replace(/<Diagram\b[\s\S]*?<\/Diagram>/g, (_match) => '\n### Diagram\n\n> Diagram omitted because the Plan MDX parser rejected the generated diagram markup. See the surrounding recap sections for the same workflow details.\n');
+            }
+            fs.writeFileSync(path, JSON.stringify(source, null, 2) + '\n');
+            NODE
+            $RECAP_CLI recap publish "${ARGS[@]}"
+          else
+            exit "$PUBLISH_STATUS"
+          fi
       - name: Read plan URL
         id: url
-        if: steps.diff.outputs.tiny != 'true' && steps.route_health.outputs.unhealthy != 'true' && steps.scan.outputs.suppressed != 'true'
+        if: steps.decide.outputs.run == 'true' && steps.diff.outputs.tiny != 'true' && steps.auth_probe.outputs.auth_failed != 'true' && steps.route_health.outputs.unhealthy != 'true' && steps.scan.outputs.suppressed != 'true'
+        env:
+          PLAN_RECAP_APP_URL: ${{ secrets.PLAN_RECAP_APP_URL || inputs['plan-url'] }}
         run: |
           set -uo pipefail
           PLAN_URL=""
@@ -654,7 +669,7 @@ jobs:
         if: steps.url.outputs.ok != 'true' && steps.diff.outputs.tiny != 'true' && steps.route_health.outputs.unhealthy != 'true' && steps.scan.outputs.suppressed != 'true'
         continue-on-error: true
         env:
-          RECAP_AGENT: ${{ needs.gate.outputs.agent }}
+          RECAP_AGENT: ${{ steps.decide.outputs.agent }}
           RECAP_BLOCK_REFERENCE_SUMMARY: ${{ steps.block_reference.outputs.summary }}
           RECAP_PUBLISH_REASON: ${{ steps.publish.outputs.reason }}
         run: |
@@ -698,13 +713,12 @@ jobs:
         continue-on-error: true
         env:
           PLAN_URL: ${{ steps.url.outputs.plan_url }}
-          RECAP_AGENT: ${{ needs.gate.outputs.agent }}
+          RECAP_AGENT: ${{ steps.decide.outputs.agent }}
         run: |
           set -uo pipefail
           RESULT=claude-result.json
           if [ "$RECAP_AGENT" = "codex" ]; then RESULT=codex-events.jsonl; fi
           if [ -f "$RESULT" ]; then $RECAP_CLI recap usage --plan-url "$PLAN_URL" --agent "$RECAP_AGENT" --result-file "$RESULT" --model "${VISUAL_RECAP_MODEL:-}" --app-url "$PLAN_RECAP_APP_URL" --token "$PLAN_RECAP_TOKEN" || true; fi
-
       - name: Cache Playwright browsers
         if: steps.url.outputs.ok == 'true'
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
@@ -763,7 +777,6 @@ jobs:
             echo '__RECAP_SHOT_REASON_EOF__'
           } >> "$GITHUB_OUTPUT"
           if [ -f recap.png ] || [ -f recap-dark.png ]; then echo "captured=true" >> "$GITHUB_OUTPUT"; else echo "captured=false" >> "$GITHUB_OUTPUT"; fi
-
       - name: Upload recap screenshot artifact
         if: steps.shot.outputs.captured == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -819,30 +832,3 @@ jobs:
         run: |
           set -euo pipefail
           $RECAP_CLI recap comment upsert --repo "$GITHUB_REPOSITORY" --issue "$PR_NUMBER" --token "$GH_TOKEN" --head-sha "$HEAD_SHA"
-
-      - name: Complete visual recap check
-        if: always() && !cancelled() && steps.recap_check.outputs.check_run_id != ''
-        continue-on-error: true
-        env:
-          CHECK_RUN_ID: ${{ steps.recap_check.outputs.check_run_id }}
-          PLAN_OK: ${{ steps.url.outputs.ok }}
-          PLAN_URL: ${{ steps.url.outputs.plan_url }}
-          SUPPRESSED: ${{ steps.scan.outputs.suppressed }}
-          SUPPRESSED_JSON: ${{ steps.scan.outputs.json }}
-          DIFF_HUGE: ${{ steps.diff.outputs.huge }}
-          DIFF_TINY: ${{ steps.diff.outputs.tiny }}
-          RECAP_AGENT_SUMMARY: ${{ steps.agent_summary.outputs.summary }}
-          RECAP_URL_REASON: ${{ steps.route_health.outputs.reason || steps.url.outputs.reason }}
-        run: |
-          set -uo pipefail
-          $RECAP_CLI recap check complete \
-            --check-run-id "$CHECK_RUN_ID" \
-            --plan-ok "$PLAN_OK" \
-            --plan-url "$PLAN_URL" \
-            --suppressed "$SUPPRESSED" \
-            --suppressed-json "$SUPPRESSED_JSON" \
-            --huge "$DIFF_HUGE" \
-            --tiny "$DIFF_TINY" \
-            --failure-summary "$RECAP_AGENT_SUMMARY" \
-            --url-reason "$RECAP_URL_REASON" \
-            --workflow-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
