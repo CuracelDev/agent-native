@@ -72,6 +72,21 @@ on:
         required: false
         type: string
         default: "high-confidence"
+      artifact-storage-account:
+        description: "Azure Blob storage account name for artifact fallback uploads"
+        required: false
+        type: string
+        default: ""
+      artifact-storage-container:
+        description: "Azure Blob container for artifact fallback uploads"
+        required: false
+        type: string
+        default: "github-artifacts"
+      artifact-public-base-url:
+        description: "Optional public base URL for fallback artifacts"
+        required: false
+        type: string
+        default: ""
     secrets:
       # Required: bearer token minted by `agent-native connect`.  Authorizes
       # publishing the recap plan and the screenshot upload.
@@ -86,6 +101,12 @@ on:
       # Override only when self-hosting the Plan app at a non-default origin.
       # Must match the plan-url input origin.
       PLAN_RECAP_APP_URL:
+        required: false
+      # Optional artifact fallback config used when GitHub artifact uploads fail
+      # because of storage quota or transient platform issues.
+      AZURE_ARTIFACT_STORAGE_CONNECTION_STRING:
+        required: false
+      AZURE_ARTIFACT_STORAGE_SAS_TOKEN:
         required: false
 
 # Concurrency key uses the caller's PR number so parallel pushes to the same
@@ -742,6 +763,8 @@ jobs:
 
       - name: Upload recap screenshot artifact
         if: steps.shot.outputs.captured == 'true'
+        id: upload-recap-screenshot-artifact
+        continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: pr-visual-recap-${{ github.event.pull_request.number }}
@@ -751,8 +774,86 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+      - name: Pack recap source artifact
+        if: always() && !cancelled()
+        run: |
+          mkdir -p recap-source-artifact
+          found=false
+          for f in \
+            recap-source.json \
+            claude-result.json \
+            claude-stderr.log \
+            codex-events.jsonl \
+            codex-stderr.log; do
+            if [ -f "$f" ]; then
+              cp "$f" recap-source-artifact/
+              found=true
+            fi
+          done
+          if [ "$found" = true ]; then
+            tar -czf pr-visual-recap-source-artifact.tar.gz recap-source-artifact
+            ls -lh pr-visual-recap-source-artifact.tar.gz
+          else
+            echo "No recap source files found; skipping source artifact tarball."
+          fi
+
+      - name: Upload recap screenshot artifact to Azure Blob fallback
+        if: always() && !cancelled() && steps.shot.outputs.captured == 'true' && steps.upload-recap-screenshot-artifact.outcome == 'failure'
+        env:
+          AZURE_ARTIFACT_STORAGE_CONNECTION_STRING: ${{ secrets.AZURE_ARTIFACT_STORAGE_CONNECTION_STRING }}
+          AZURE_ARTIFACT_STORAGE_ACCOUNT: ${{ inputs.artifact-storage-account }}
+          AZURE_ARTIFACT_STORAGE_SAS_TOKEN: ${{ secrets.AZURE_ARTIFACT_STORAGE_SAS_TOKEN }}
+          AZURE_ARTIFACT_STORAGE_CONTAINER: ${{ inputs.artifact-storage-container || 'github-artifacts' }}
+          AZURE_ARTIFACT_PUBLIC_BASE_URL: ${{ inputs.artifact-public-base-url }}
+        run: |
+          set -euo pipefail
+          if [ ! -f recap.png ] && [ ! -f recap-dark.png ]; then
+            echo "No screenshot files exist; skipping fallback upload."
+            exit 0
+          fi
+
+          if [ -z "${AZURE_ARTIFACT_STORAGE_CONNECTION_STRING:-}" ] && { [ -z "${AZURE_ARTIFACT_STORAGE_ACCOUNT:-}" ] || [ -z "${AZURE_ARTIFACT_STORAGE_SAS_TOKEN:-}" ]; }; then
+            echo "::warning::GitHub screenshot artifact upload failed and Azure Blob artifact fallback is not configured."
+            exit 0
+          fi
+
+          mkdir -p recap-screenshot-artifact
+          [ -f recap.png ] && cp recap.png recap-screenshot-artifact/
+          [ -f recap-dark.png ] && cp recap-dark.png recap-screenshot-artifact/
+          tar -czf pr-visual-recap-screenshot-artifact.tar.gz recap-screenshot-artifact
+
+          storage_account="${AZURE_ARTIFACT_STORAGE_ACCOUNT:-}"
+          sas_token="${AZURE_ARTIFACT_STORAGE_SAS_TOKEN#\?}"
+          blob_endpoint="https://${storage_account}.blob.core.windows.net"
+          if [ -n "${AZURE_ARTIFACT_STORAGE_CONNECTION_STRING:-}" ]; then
+            storage_account="$(printf '%s' "${AZURE_ARTIFACT_STORAGE_CONNECTION_STRING}" | tr ';' '\n' | grep '^AccountName=' | cut -d= -f2-)"
+            sas_token="$(printf '%s' "${AZURE_ARTIFACT_STORAGE_CONNECTION_STRING}" | tr ';' '\n' | grep '^SharedAccessSignature=' | cut -d= -f2-)"
+            blob_endpoint="$(printf '%s' "${AZURE_ARTIFACT_STORAGE_CONNECTION_STRING}" | tr ';' '\n' | grep '^BlobEndpoint=' | cut -d= -f2-)"
+            [ -n "${blob_endpoint:-}" ] || blob_endpoint="https://${storage_account}.blob.core.windows.net"
+            sas_token="${sas_token#\?}"
+          fi
+          if [ -z "${storage_account:-}" ] || [ -z "${sas_token:-}" ]; then
+            echo "::warning::Azure Blob screenshot fallback could not resolve storage account and SAS token."
+            exit 0
+          fi
+
+          blob="${GITHUB_REPOSITORY}/${GITHUB_RUN_ID}/pr-visual-recap-${PR_NUMBER}.tar.gz"
+          curl --fail-with-body -X PUT \
+            -H "x-ms-blob-type: BlockBlob" \
+            -H "x-ms-version: 2022-11-02" \
+            --upload-file pr-visual-recap-screenshot-artifact.tar.gz \
+            "${blob_endpoint%/}/${AZURE_ARTIFACT_STORAGE_CONTAINER}/${blob}?${sas_token}" || exit 0
+
+          if [ -n "${AZURE_ARTIFACT_PUBLIC_BASE_URL:-}" ]; then
+            echo "Screenshot artifact fallback uploaded to ${AZURE_ARTIFACT_PUBLIC_BASE_URL%/}/${blob}"
+          else
+            echo "Screenshot artifact fallback uploaded to azure://${AZURE_ARTIFACT_STORAGE_CONTAINER}/${blob}"
+          fi
+
       - name: Upload recap source artifact
         if: always() && !cancelled()
+        id: upload-recap-source-artifact
+        continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           # recap-source.json + the agent transcript (claude-result.json /
@@ -770,6 +871,54 @@ jobs:
             codex-stderr.log
           if-no-files-found: ignore
           retention-days: 14
+
+      - name: Upload recap source artifact to Azure Blob fallback
+        if: always() && !cancelled() && steps.upload-recap-source-artifact.outcome == 'failure'
+        env:
+          AZURE_ARTIFACT_STORAGE_CONNECTION_STRING: ${{ secrets.AZURE_ARTIFACT_STORAGE_CONNECTION_STRING }}
+          AZURE_ARTIFACT_STORAGE_ACCOUNT: ${{ inputs.artifact-storage-account }}
+          AZURE_ARTIFACT_STORAGE_SAS_TOKEN: ${{ secrets.AZURE_ARTIFACT_STORAGE_SAS_TOKEN }}
+          AZURE_ARTIFACT_STORAGE_CONTAINER: ${{ inputs.artifact-storage-container || 'github-artifacts' }}
+          AZURE_ARTIFACT_PUBLIC_BASE_URL: ${{ inputs.artifact-public-base-url }}
+        run: |
+          set -euo pipefail
+          if [ ! -s pr-visual-recap-source-artifact.tar.gz ]; then
+            echo "No recap source artifact tarball exists; skipping fallback upload."
+            exit 0
+          fi
+
+          if [ -z "${AZURE_ARTIFACT_STORAGE_CONNECTION_STRING:-}" ] && { [ -z "${AZURE_ARTIFACT_STORAGE_ACCOUNT:-}" ] || [ -z "${AZURE_ARTIFACT_STORAGE_SAS_TOKEN:-}" ]; }; then
+            echo "::warning::GitHub source artifact upload failed and Azure Blob artifact fallback is not configured."
+            exit 0
+          fi
+
+          storage_account="${AZURE_ARTIFACT_STORAGE_ACCOUNT:-}"
+          sas_token="${AZURE_ARTIFACT_STORAGE_SAS_TOKEN#\?}"
+          blob_endpoint="https://${storage_account}.blob.core.windows.net"
+          if [ -n "${AZURE_ARTIFACT_STORAGE_CONNECTION_STRING:-}" ]; then
+            storage_account="$(printf '%s' "${AZURE_ARTIFACT_STORAGE_CONNECTION_STRING}" | tr ';' '\n' | grep '^AccountName=' | cut -d= -f2-)"
+            sas_token="$(printf '%s' "${AZURE_ARTIFACT_STORAGE_CONNECTION_STRING}" | tr ';' '\n' | grep '^SharedAccessSignature=' | cut -d= -f2-)"
+            blob_endpoint="$(printf '%s' "${AZURE_ARTIFACT_STORAGE_CONNECTION_STRING}" | tr ';' '\n' | grep '^BlobEndpoint=' | cut -d= -f2-)"
+            [ -n "${blob_endpoint:-}" ] || blob_endpoint="https://${storage_account}.blob.core.windows.net"
+            sas_token="${sas_token#\?}"
+          fi
+          if [ -z "${storage_account:-}" ] || [ -z "${sas_token:-}" ]; then
+            echo "::warning::Azure Blob source artifact fallback could not resolve storage account and SAS token."
+            exit 0
+          fi
+
+          blob="${GITHUB_REPOSITORY}/${GITHUB_RUN_ID}/pr-visual-recap-source-${PR_NUMBER}.tar.gz"
+          curl --fail-with-body -X PUT \
+            -H "x-ms-blob-type: BlockBlob" \
+            -H "x-ms-version: 2022-11-02" \
+            --upload-file pr-visual-recap-source-artifact.tar.gz \
+            "${blob_endpoint%/}/${AZURE_ARTIFACT_STORAGE_CONTAINER}/${blob}?${sas_token}" || exit 0
+
+          if [ -n "${AZURE_ARTIFACT_PUBLIC_BASE_URL:-}" ]; then
+            echo "Source artifact fallback uploaded to ${AZURE_ARTIFACT_PUBLIC_BASE_URL%/}/${blob}"
+          else
+            echo "Source artifact fallback uploaded to azure://${AZURE_ARTIFACT_STORAGE_CONTAINER}/${blob}"
+          fi
 
       - name: Upsert sticky comment
         if: always() && !cancelled()
