@@ -16,12 +16,28 @@ permissions:
 #
 # On PR close we delete the branches and remove the env overrides.
 
-env:
-  NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
-
 jobs:
+  neon-api-key:
+    runs-on: ubuntu-latest
+    outputs:
+      configured: ${{ steps.check.outputs.configured }}
+    steps:
+      - name: Check Neon API key
+        id: check
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+        run: |
+          if [ -n "$NEON_API_KEY" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "### Neon preview branches skipped" >> "$GITHUB_STEP_SUMMARY"
+            echo "NEON_API_KEY is not configured or is unavailable for this pull request." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
   create-branches:
-    if: github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    needs: neon-api-key
+    if: needs.neon-api-key.outputs.configured == 'true' && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -93,7 +109,8 @@ jobs:
           done
 
   delete-branches:
-    if: github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    needs: neon-api-key
+    if: needs.neon-api-key.outputs.configured == 'true' && github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
